@@ -113,7 +113,7 @@ flowchart LR
 !!! note
 
     This example is using data [exporter](../concepts/exporters.md) to generate the JSON file, you can easily change the export format (XML, CSV, ...)
-    or the [storage](../concepts/storages.md) backend. You can also use [item pipeline](../concepts/item_pipeline.md) to drop / transform data.
+    or the storage backend. You can also use [item pipeline](../concepts/item_pipeline.md) to drop / transform data.
 
 ## What’s next?
 The next steps are to [install qCrawl](installation.md), follow through the tutorial and [join the community](https://discord.gg/yT54ff6STY) on Discord.<br> 
