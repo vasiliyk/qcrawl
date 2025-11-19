@@ -1,0 +1,206 @@
+import logging
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
+from urllib.parse import urlparse
+
+from qcrawl.middleware.base import SpiderMiddleware
+
+if TYPE_CHECKING:
+    from qcrawl.core.item import Item
+    from qcrawl.core.request import Request
+    from qcrawl.core.response import Page
+    from qcrawl.core.spider import Spider
+
+logger = logging.getLogger(__name__)
+
+
+class OffsiteMiddleware(SpiderMiddleware):
+    """Filter requests to URLs outside allowed domains.
+
+    Features:
+        - Configurable allowed domains per spider (`ALLOWED_DOMAINS` or auto-extract from `start_urls`)
+        - Automatic domain extraction and normalization (strip ports, lowercase)
+        - Subdomain support (example.com allows api.example.com)
+        - Accepts `Request` objects and `str` URLs from spider output (converts `str` to `Request`)
+        - Emits `request_dropped` signal for stats when a request is filtered
+    """
+
+    def __init__(self, enabled: bool = True) -> None:
+        self.enabled = enabled
+        self._dropped_count = 0
+
+    def _normalize_domain(self, netloc: str) -> str:
+        """Lowercase and remove port from netloc."""
+        if not netloc:
+            return ""
+        host = netloc.split(":", 1)[0] if ":" in netloc else netloc
+        return host.lower()
+
+    def _get_allowed_domains(self, spider: "Spider") -> set[str] | None:
+        """Return a set of allowed domains (normalized), or None to allow all.
+        Accepts `ALLOWED_DOMAINS` attribute (str, list, tuple, set) on spider.
+        If not provided, extracts domains from `start_urls`.
+        """
+        allowed = getattr(spider, "ALLOWED_DOMAINS", None)
+        if allowed is not None:
+            if isinstance(allowed, (list, tuple, set)):
+                return {self._normalize_domain(d) for d in allowed if d}
+            return {self._normalize_domain(allowed)} if allowed else None
+
+        start_urls = getattr(spider, "start_urls", [])
+        if not start_urls:
+            return None
+
+        domains: set[str] = set()
+        for url in start_urls:
+            parsed = urlparse(url)
+            if parsed.netloc:
+                domains.add(self._normalize_domain(parsed.netloc))
+
+        return domains if domains else None
+
+    def _extract_domain(self, url: str) -> str | None:
+        """Extract normalized domain from URL, or None for invalid URLs."""
+        try:
+            parsed = urlparse(url)
+            if not parsed.netloc:
+                return None
+            return self._normalize_domain(parsed.netloc)
+        except Exception:
+            return None
+
+    def _is_offsite(self, url: str, allowed_domains: set[str]) -> bool:
+        """Return True if URL is offsite (not allowed)."""
+        domain = self._extract_domain(url)
+        if not domain:
+            return True
+
+        if domain in allowed_domains:
+            return False
+
+        for allowed in allowed_domains:
+            if domain.endswith(f".{allowed}"):
+                return False
+            # Allow reciprocal rule: if allowed is a subdomain, accepting base domain
+            if allowed.endswith(f".{domain}"):
+                return False
+
+        return True
+
+    def _is_request(self, item: object) -> bool:
+        """Heuristic check for Request instances without importing at module level."""
+        return hasattr(item, "url") and hasattr(item, "meta")
+
+    async def process_spider_output(
+        self,
+        response: "Page",
+        result: "AsyncGenerator[Item | Request | str, None]",
+        spider: "Spider",
+    ) -> AsyncGenerator["Item | Request | str", None]:
+        """Filter offsite requests from spider output.
+
+        Yields items and onsite requests. Converts `str` results to `Request`
+        and preserves depth information from `response.request.meta`.
+        """
+        if not self.enabled:
+            async for item in result:
+                yield item
+            return
+
+        allowed_domains = self._get_allowed_domains(spider)
+        if allowed_domains is None:
+            # No filtering
+            async for item in result:
+                yield item
+            return
+
+        # Determine current depth if available
+        current_depth = 0
+        if getattr(response, "request", None) is not None and hasattr(response.request, "meta"):
+            current_depth = int(response.request.meta.get("depth", 0))
+
+        # Local imports to avoid circular dependencies at module import time
+        from qcrawl.core.item import Item
+        from qcrawl.core.request import Request as _Req
+
+        async for item in result:
+            # Pass Items unchanged
+            if isinstance(item, Item):
+                yield item
+                continue
+
+            # Handle Request objects
+            if isinstance(item, _Req):
+                req = item
+                # Check offsite
+                if self._is_offsite(req.url, allowed_domains):
+                    self._dropped_count += 1
+                    logger.debug(
+                        "Filtered offsite request to %s: %s (allowed: %s)",
+                        self._extract_domain(req.url),
+                        req.url,
+                        ", ".join(sorted(allowed_domains)),
+                    )
+                    # Emit request_dropped signal for stats if available
+                    dispatcher = getattr(spider, "signals", None)
+                    try:
+                        if dispatcher is not None:
+                            await dispatcher.send_async(
+                                "request_dropped",
+                                request=req,
+                                exception=None,
+                            )
+                    except Exception:
+                        logger.exception("Error sending request_dropped signal for %s", req.url)
+                    continue
+
+                yield req
+                continue
+
+            # Handle string URLs: convert to Request
+            if isinstance(item, str):
+                if self._is_offsite(item, allowed_domains):
+                    self._dropped_count += 1
+                    logger.debug(
+                        "Filtered offsite request to %s: %s (allowed: %s)",
+                        self._extract_domain(item),
+                        item,
+                        ", ".join(sorted(allowed_domains)),
+                    )
+                    dispatcher = getattr(spider, "signals", None)
+                    try:
+                        if dispatcher is not None:
+                            await dispatcher.send_async(
+                                "request_dropped",
+                                request=None,
+                                exception=None,
+                            )
+                    except Exception:
+                        logger.exception("Error sending request_dropped signal for %s", item)
+                    continue
+
+                new_req = _Req(url=item, priority=0, meta={"depth": current_depth + 1})
+                yield new_req
+                continue
+
+            # Unknown type: pass through unchanged
+            yield item
+
+    async def spider_opened(self, spider: "Spider") -> None:
+        """Log configured allowed domains when spider opens."""
+        if not self.enabled:
+            logger.info("OffsiteMiddleware: disabled")
+            return
+
+        allowed_domains = self._get_allowed_domains(spider)
+        if allowed_domains is None:
+            logger.info("OffsiteMiddleware: all domains allowed")
+        elif allowed_domains:
+            logger.info("OffsiteMiddleware: allowed_domains=%s", ", ".join(sorted(allowed_domains)))
+        else:
+            logger.warning("OffsiteMiddleware: no allowed domains configured")
+
+    async def spider_closed(self, spider: "Spider") -> None:
+        """Log offsite statistics when spider closes."""
+        if self._dropped_count > 0:
+            logger.info("Filtered %d offsite requests", self._dropped_count)

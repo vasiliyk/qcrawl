@@ -1,0 +1,110 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
+# Project information
+site_author: Vasiliy Kiryanov
+site_name: qCrawl
+site_url: https://qcawl.org
+site_description: Fast asynchronous web crawler framework, supporting distributed crawling, deduplication,
+  and extensible middleware.
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - 5 mins overview: getting-started/overview.md
+    - Installation: getting-started/installation.md
+    - Examples: getting-started/examples.md
+#    - Tutorial: getting-started/tutorial.md
+  - Concepts:
+      - Command-Line Interface: concepts/cli.md
+      - Spiders: concepts/spiders.md
+      - Selectors: concepts/selectors.md
+      - Items: concepts/items.md
+      - Item Pipeline: concepts/item_pipeline.md
+      - Exporters: concepts/exporters.md
+      - Middlewares: concepts/middlewares.md
+      - Requests and Responses: concepts/requests_responses.md
+      - Settings: concepts/settings.md
+  - Built-in Components:
+      - Logging: built-in/logging.md
+      - Stat Collection: built-in/stats.md
+  - Extending qCrawl:
+    - Architecture overview: extending/architecture_overview.md
+#    - Middleware: extending/middleware.md
+#    - Signals: extending/downloader_middleware.md
+#    - Scheduler: extending/downloader_middleware.md
+#    - Item Exporters: extending/downloader_middleware.md
+
+# Repository
+repo_url: https://github.com/crawlcore/qcrawl
+repo_name: crawlcore/qcrawl
+
+# Copyright
+copyright: Copyright &copy; 2025 Vasiliy Kiryanov
+
+plugins:
+  - search
+
+# Configuration
+theme:
+  name: material
+  features:
+    - content.footnote.tooltips
+    - navigation.expand
+    - navigation.indexes
+    - toc.integrate
+    - content.code.copy
+  font:
+    text: Roboto
+    code: Roboto Mono
+  icon:
+    logo: logo
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+extra:
+  social:
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/yT54ff6STY
+  generator: false
+
+
+markdown_extensions:
+  - abbr
+  - attr_list
+  - def_list
+  - footnotes
+  - admonition
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg

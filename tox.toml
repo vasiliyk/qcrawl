@@ -1,0 +1,69 @@
+[tox]
+env_list = ["py311", "lint", "type", "precommit", "coverage"]
+requires = ["tox>=4.0"]
+
+[testenv]
+usedevelop = true
+deps = [
+    # development dependencies
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5",
+    "tox>=4.32.0",
+    "pre-commit>=3.0",
+    "types-aiofiles>=23.0",
+
+    # redis backend
+    "redis>=8.2.1",
+
+    # observability
+    "opentelemetry-api>=1.27.0",
+    "opentelemetry-sdk>=1.27.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.27.0"
+]
+
+commands_pre = [
+  "python -m pip install --upgrade pip",
+  "python -m pip install -e .[dev]"
+]
+setenv = { PYTHONWARNINGS = "default::DeprecationWarning" }
+passenv = ["CI", "GITHUB_ACTIONS", "GITHUB_*", "QCRAWL_*"]
+skip_install = false
+
+
+commands = ["pytest -q --maxfail=1"]
+
+["testenv:py311"]
+description = "Run tests on Python 3.11"
+basepython = "python3.11"
+
+["testenv:lint"]
+description = "Run linters / formatter (ruff)"
+basepython = "python3.11"
+commands = [
+  "ruff format --exit-zero .",
+  "ruff check ."
+]
+
+["testenv:type"]
+description = "Run static typing (mypy)"
+basepython = "python3.11"
+commands = [
+  "mypy ."
+]
+
+["testenv:precommit"]
+description = "Run pre-commit hooks"
+basepython = "python3.11"
+commands = [
+  "pre-commit run --all-files"
+]
+
+["testenv:coverage"]
+description = "Run tests with coverage report"
+basepython = "python3.11"
+commands = [
+  "pytest --cov=qcrawl --cov-report=term-missing -q"
+]

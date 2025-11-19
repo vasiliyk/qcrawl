@@ -1,0 +1,428 @@
+from __future__ import annotations
+
+import asyncio
+import inspect
+import logging
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
+
+import aiohttp
+
+from qcrawl import signals
+from qcrawl.core.downloader import Downloader
+from qcrawl.core.item import Item
+from qcrawl.core.request import Request
+from qcrawl.core.response import Page
+from qcrawl.core.scheduler import Scheduler
+from qcrawl.core.spider import Spider
+from qcrawl.middleware import DownloaderMiddleware
+from qcrawl.middleware.base import Action, MiddlewareResult
+from qcrawl.middleware.manager import MiddlewareManager
+
+if TYPE_CHECKING:
+    from qcrawl.core.crawler import Crawler
+
+logger = logging.getLogger(__name__)
+
+
+class CrawlEngine:
+    """Core engine orchestrating scheduler, downloader, spider, and middleware.
+
+    Responsibilities
+        - Wire scheduler, downloader and spider together for the crawl lifecycle.
+        - Execute downloader middleware chains (request/response/exception).
+        - Use MiddlewareManager for spider middleware phases (start/input/output/exception).
+        - Manage worker tasks and ensure graceful shutdown.
+        - Emit signals for observability and stats.
+    """
+
+    __slots__ = (
+        "scheduler",
+        "downloader",
+        "spider",
+        "signals",
+        "middlewares",
+        "_reversed_mws",
+        "_running",
+        "crawler",
+        "_mw_manager",
+    )
+
+    def __init__(
+        self,
+        scheduler: Scheduler,
+        downloader: Downloader,
+        spider: Spider,
+    ) -> None:
+        """Initialize engine with required components.
+
+        Args:
+            scheduler: Request scheduler used to obtain new work.
+            downloader: Downloader responsible for fetching HTTP responses.
+            spider: Spider instance to which responses are dispatched.
+        """
+        self.scheduler = scheduler
+        self.downloader = downloader
+        self.spider = spider
+        self.signals = signals.signals_registry.for_sender(self)
+
+        self.middlewares: list[DownloaderMiddleware] = []
+        self._reversed_mws: list[DownloaderMiddleware] = []
+        self._mw_manager = MiddlewareManager(downloader=self.middlewares, spider=[])
+
+        self._running = False
+        self.crawler: Crawler | None = None
+
+    def add_middleware(self, mw: DownloaderMiddleware) -> None:
+        """Register a downloader middleware before crawl starts.
+
+        Raises:
+            RuntimeError: if called after `crawl()` has started.
+        """
+        if self._running:
+            raise RuntimeError("Cannot add middleware after crawl() has started")
+        self.middlewares.append(mw)
+        self._reversed_mws = list(reversed(self.middlewares))
+        # keep MiddlewareManager in sync (only update downloader chain)
+        self._mw_manager.downloader = self.middlewares
+
+    async def crawl(self) -> None:
+        """Start the crawl lifecycle.
+
+        Workflow:
+          1. Schedule `start_requests()` via spider middleware.
+          2. Spawn worker tasks equal to `spider.concurrency`.
+          3. Await `scheduler.join()` until all work finishes.
+          4. On unhandled exception: emit `spider_error` and re-raise.
+          5. Always ensure scheduler is closed and workers cancelled.
+        """
+        self._running = True
+        reason = "finished"
+        workers: list[asyncio.Task[None]] = []
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Crawl started for spider=%s", getattr(self.spider, "name", None))
+
+        try:
+            await self._schedule_start_requests()
+
+            concurrency = getattr(self.spider, "concurrency", None)
+            if concurrency is None:
+                rs = getattr(self.spider, "runtime_settings", None)
+                if rs is not None:
+                    raw = getattr(rs, "concurrency", None)
+                    # Accept only true ints (reject bool). Do NOT coerce from float/str.
+                    if isinstance(raw, int) and not isinstance(raw, bool):
+                        concurrency = raw
+                    else:
+                        concurrency = None
+
+            # Ensure we end up with a plain int; otherwise use default 10
+            if not isinstance(concurrency, int) or isinstance(concurrency, bool):
+                concurrency = 10
+
+            # Validate range; if invalid, log and use default
+            if concurrency < 1 or concurrency > 10000:
+                logger.warning(
+                    "Invalid spider concurrency %r for %s; using default 10",
+                    getattr(self.spider, "concurrency", None),
+                    getattr(self.spider, "name", "<unknown>"),
+                )
+                concurrency = 10
+
+            workers = [
+                asyncio.create_task(self._worker(i), name=f"worker-{i}") for i in range(concurrency)
+            ]
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Workers spawned: %d for spider=%s",
+                    len(workers),
+                    getattr(self.spider, "name", None),
+                )
+
+            await self.scheduler.join()
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Crawl finished for spider=%s", getattr(self.spider, "name", None))
+
+        except Exception as exc:
+            reason = f"{type(exc).__name__}: {exc}"
+            logger.exception("Crawl failed: %s", reason)
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "signal.emit spider_error -- spider=%s payload=%s",
+                    getattr(self.spider, "name", None),
+                    str(exc),
+                )
+
+            await self.signals.send_async("spider_error", exc=exc)
+            raise
+
+        finally:
+            self._running = False
+            await self.scheduler.close()
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Scheduler closed for spider=%s", getattr(self.spider, "name", None))
+
+            for w in workers:
+                w.cancel()
+            await asyncio.gather(*workers, return_exceptions=True)
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Workers stopped for spider=%s", getattr(self.spider, "name", None))
+
+    async def _schedule_start_requests(self) -> None:
+        """Enqueue initial requests from spider.start_requests() using spider middleware."""
+        async for req in self._mw_manager.process_start_requests(
+            self.spider.start_requests(), self.spider
+        ):
+            request = (
+                Request(url=req, priority=0, meta={"depth": 0}) if isinstance(req, str) else req
+            )
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Enqueuing start URL: %s", getattr(request, "url", None))
+
+            await self.scheduler.add(request)
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Scheduling request <%s %s>",
+                    getattr(request, "method", None),
+                    getattr(request, "url", None),
+                )
+
+    async def _worker(self, worker_id: int) -> None:
+        """Worker loop: fetch requests from scheduler and process them."""
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Worker %s started", worker_id)
+
+        while True:
+            try:
+                request = await self.scheduler.get()
+            except asyncio.CancelledError:
+                break
+
+            try:
+                response = await self._process_request(request)
+                if response:
+                    await self._process_parse_results(request, response)
+            except Exception as exc:
+                await self._handle_exception(request, exc)
+            finally:
+                self.scheduler.task_done()
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Worker %s stopped", worker_id)
+
+    async def _process_request(self, request: Request) -> Page | None:
+        """Process a single Request through downloader middleware and perform fetch."""
+        # Request phase
+        result = await self._run_middleware_chain("process_request", request, self.middlewares)
+        if result.action is Action.KEEP:
+            return result.payload  # type: ignore[return-value]
+        if result.action in (Action.RETRY, Action.DROP):
+            await self._handle_retry_or_drop(result, request)
+            return None
+
+        # Download
+        await self.signals.send_async("request_reached_downloader", request=request)
+
+        # Delegate header merging to the Downloader; pass spider so downloader can access runtime settings
+        response = await self.downloader.fetch(request, spider=self.spider)
+
+        # Response phase
+        result = await self._run_middleware_chain(
+            "process_response", request, self._reversed_mws, response
+        )
+        if result.action is Action.KEEP:
+            return result.payload  # type: ignore[return-value]
+        if result.action in (Action.RETRY, Action.DROP):
+            await self._handle_retry_or_drop(result, request)
+            return None
+
+        return response
+
+    async def _run_middleware_chain(
+        self,
+        method_name: str,
+        request: Request,
+        chain: list[DownloaderMiddleware],
+        initial_payload: object | None = None,
+    ) -> MiddlewareResult:
+        """Run a downloader middleware chain."""
+        for mw in chain:
+            method = getattr(mw, method_name)
+            result = (
+                await method(request, initial_payload, self.spider)
+                if initial_payload is not None
+                else await method(request, self.spider)
+            )
+
+            if not isinstance(result, MiddlewareResult):
+                raise TypeError(
+                    f"{mw.__class__.__name__}.{method_name} must return MiddlewareResult, got {type(result)!r}"
+                )
+
+            if result.action is not Action.CONTINUE:
+                if logger.isEnabledFor(logging.DEBUG):
+                    payload_preview = None
+                    try:
+                        if result.payload is not None:
+                            payload_preview = repr(result.payload)[:200]
+                    except Exception:
+                        payload_preview = "<unreprable>"
+                    logger.debug(
+                        "middleware %s.%s -> %s (mw=%s payload=%s)",
+                        method_name,
+                        getattr(request, "url", None),
+                        result.action.name,
+                        mw.__class__.__name__,
+                        payload_preview,
+                    )
+                return result
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "middleware %s CONTINUE (mw=%s url=%s)",
+                    method_name,
+                    mw.__class__.__name__,
+                    getattr(request, "url", None),
+                )
+
+        if initial_payload is not None and isinstance(initial_payload, Page):
+            return MiddlewareResult.keep(initial_payload)
+        return MiddlewareResult.continue_()
+
+    async def _handle_retry_or_drop(
+        self, result: MiddlewareResult, original_request: Request
+    ) -> None:
+        """Handle RETRY or DROP results from downloader middleware."""
+        if result.action is Action.RETRY:
+            if not isinstance(result.payload, Request):
+                raise TypeError("Retry payload must be Request")
+            if logger.isEnabledFor(logging.DEBUG):
+                try:
+                    preview = getattr(result.payload, "to_dict", lambda: repr(result.payload))()
+                except Exception:
+                    preview = "<unreprable>"
+                logger.debug("middleware.retry scheduling new request %s", preview)
+            await self.scheduler.add(result.payload)
+        elif result.action is Action.DROP:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("middleware.drop url=%s", getattr(original_request, "url", None))
+            await self.signals.send_async(
+                "request_dropped",
+                request=original_request,
+                exception=None,
+            )
+
+    async def _process_parse_results(self, request: Request, response: Page) -> None:
+        """Run spider parse coroutine via spider middleware and handle yielded values."""
+
+        # run spider input hooks (may return an Exception to abort)
+        exc = await self._mw_manager.process_spider_input(response, self.spider)
+        if exc is not None:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "spider_input.exception url=%s err=%s", getattr(request, "url", None), str(exc)
+                )
+            await self._handle_exception(request, exc)  # delegate to existing logic
+            return
+
+        # Obtain spider parse async-iterator (support coroutine-returning implementations)
+        parse_result = self.spider.parse(response)
+
+        # If parse() returns a coroutine, await it to get the async generator
+        parsed_ag: AsyncIterator[Item | str | Request]
+        if inspect.isawaitable(parse_result):
+            parsed_ag = await parse_result
+        else:
+            parsed_ag = parse_result
+
+        if not hasattr(parsed_ag, "__aiter__"):
+            raise TypeError("Spider.parse must return an async iterable (async-generator)")
+
+        # Apply spider middlewares (they are responsible for depth & normalization)
+        wrapped_ag = self._mw_manager.process_spider_output(response, parsed_ag, self.spider)
+
+        async for result in wrapped_ag:
+            if isinstance(result, (Item, dict)):
+                item = result if isinstance(result, Item) else Item(data=result)
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "item_scraped %s from %s",
+                        getattr(item, "data", None),
+                        getattr(self.spider, "name", None),
+                    )
+                await self.signals.send_async("item_scraped", item=item, spider=self.spider)
+
+            elif isinstance(result, Request):
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "scheduling request %s (priority=%s) from %s",
+                        getattr(result, "url", None),
+                        getattr(result, "priority", None),
+                        getattr(self.spider, "name", None),
+                    )
+                await self.scheduler.add(result)
+
+            elif isinstance(result, str):
+                # Convert stray strings to Request and schedule (no depth enforcement here).
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "scheduling URL string %s from %s",
+                        result,
+                        getattr(self.spider, "name", None),
+                    )
+                new_req = Request(url=result)
+                await self.scheduler.add(new_req)
+
+            else:
+                # Unknown yielded type: log and ignore
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "Ignoring unexpected spider parse result type %s from %s",
+                        type(result),
+                        getattr(self.spider, "name", None),
+                    )
+
+    async def _handle_exception(self, request: Request, exc: Exception) -> None:
+        """Handle exceptions raised while processing a request."""
+        is_network = isinstance(exc, (asyncio.TimeoutError, aiohttp.ClientError))
+
+        if not is_network:
+            exc_info = (type(exc), exc, getattr(exc, "__traceback__", None))
+            logger.exception("Unhandled error for %s", request.url, exc_info=exc_info)
+            await self.signals.send_async("request_dropped", request=request, exception=exc)
+            return
+
+        try:
+            result = await self._run_middleware_chain(
+                "process_exception", request, self._reversed_mws, exc
+            )
+        except Exception:
+            exc_info = (type(exc), exc, getattr(exc, "__traceback__", None))
+            logger.exception(
+                "Middleware chain raised while processing exception for %s",
+                request.url,
+                exc_info=exc_info,
+            )
+            await self.signals.send_async("request_dropped", request=request, exception=exc)
+            return
+
+        if result.action in (Action.RETRY, Action.DROP):
+            await self._handle_retry_or_drop(result, request)
+        else:
+            logger.error("Network error for %s: %s", request.url, exc)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Network exception traceback for %s",
+                    request.url,
+                    exc_info=(type(exc), exc, getattr(exc, "__traceback__", None)),
+                )
+            await self.signals.send_async("request_dropped", request=request, exception=exc)
