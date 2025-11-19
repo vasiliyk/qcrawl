@@ -3,7 +3,7 @@
 # Project information
 site_author: Vasiliy Kiryanov
 site_name: qCrawl
-site_url: https://qcawl.org
+site_url: https://qcawl.org/
 site_description: Fast asynchronous web crawler framework, supporting distributed crawling, deduplication,
   and extensible middleware.
 
