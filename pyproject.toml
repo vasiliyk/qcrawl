@@ -5,17 +5,21 @@ description = "Fast async web crawler & scraping framework, supporting deduplica
 authors = [{ name = "Vasiliy Kiryanov", email = "vasiliy.kiryanov@gmail.com" }]
 maintainers = [{name = "Vasiliy Kiryanov", email = "vasiliy.kiryanov@gmail.com"}]
 license = { text = "MIT" }
+license-files = ["LICENSE"]
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
 classifiers = [
-    "Development Status :: 6 - Mature",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Framework :: AsyncIO",
     "Typing :: Typed",
@@ -27,7 +31,6 @@ keywords = [
     "async",
     "asyncio",
     "scraper",
-    "http",
 ]
 
 # Core dependencies
@@ -70,10 +73,10 @@ docs = ["mkdocs-material>=9.6.23"]
 
 
 [project.urls]
-Homepage = "https://github.com/qcrawl/qcrawl"
-Repository = "https://github.com/qcrawl/qcrawl"
-Issues = "https://github.com/qcrawl/qcrawl/issues"
-Documentation = "https://github.com/qcrawl/qcrawl#readme"
+Homepage = "https://www.qcrawl.org/"
+Repository = "https://github.com/crawlcore/qcrawl"
+Issues = "https://github.com/crawlcore/qcrawl/issues"
+Documentation = "https://www.qcrawl.org/"
 
 # CLI entry point
 [project.scripts]
