@@ -65,5 +65,5 @@ commands = [
 description = "Run tests with coverage report"
 basepython = "python3.11"
 commands = [
-  "pytest --cov=qcrawl --cov-report=term-missing -q"
+  "pytest --cov --junitxml=junit.xml -o junit_family=legacy"
 ]
