@@ -42,7 +42,7 @@ basepython = ["python3.11"]
 description = "Run linters / formatter (ruff)"
 basepython = ["python3.11"]
 commands = [
-    ["ruff", "format", "--exit-zero", "."],
+    ["ruff", "format", "--exit-non-zero-on-fix", "."],
     ["ruff", "check", "."],
 ]
 
