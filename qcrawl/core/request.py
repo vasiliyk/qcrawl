@@ -32,6 +32,11 @@ class Request:
     priority: int = 0
     method: str = "GET"
     body: bytes | None = None
+    cookies: dict[str, str] | None = None
+    retries: int = 0
+    timeout_ms: int = 10000
+    proxy: str | None = None
+    ts: int = 0
 
     def __post_init__(self) -> None:
         # Normalize URL (defensive)

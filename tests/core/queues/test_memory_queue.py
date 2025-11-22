@@ -7,6 +7,7 @@ from qcrawl.core.request import Request
 
 
 def test_init_validation_raises_on_invalid_args() -> None:
+    """Test that invalid constructor arguments raise appropriate errors."""
     with pytest.raises(ValueError):
         MemoryPriorityQueue(maxsize=-1)
 
@@ -15,76 +16,73 @@ def test_init_validation_raises_on_invalid_args() -> None:
         MemoryPriorityQueue(foo=1)
 
 
-def test_put_get_order_and_fifo_tiebreak() -> None:
+@pytest.mark.asyncio
+async def test_put_get_order_and_fifo_tiebreak() -> None:
     q = MemoryPriorityQueue()
 
-    r_low = Request(url="http://low.example")  # placeholder (Request.priority defaults to 0)
-    r_p5 = Request(url="http://p5.example")  # used with explicit priority=5 when enqueued
-    r_p1_a = Request(url="http://p1-a.example")  # first priority-1 item (FIFO order matters)
-    r_p1_b = Request(url="http://p1-b.example")  # second priority-1 item
+    r_low = Request(url="http://low.example")  # → http://low.example/
+    r_p5 = Request(url="http://p5.example")  # → http://p5.example/
+    r_p1_a = Request(url="http://p1-a.example")  # → http://p1-a.example/
+    r_p1_b = Request(url="http://p1-b.example")  # → http://p1-b.example/
 
-    # enqueue in mixed order and with explicit priorities
-    asyncio.run(q.put(r_low, priority=5))
-    asyncio.run(q.put(r_p1_a, priority=1))
-    asyncio.run(q.put(r_p1_b, priority=1))
-    asyncio.run(q.put(r_p5, priority=5))
+    await q.put(r_low, priority=5)
+    await q.put(r_p1_a, priority=1)
+    await q.put(r_p1_b, priority=1)
+    await q.put(r_p5, priority=5)
 
-    # expected: priority 1 items first (in FIFO order), then priority 5 items (FIFO)
-    got = asyncio.run(q.get())
-    assert got.url == r_p1_a.url
-
-    got = asyncio.run(q.get())
-    assert got.url == r_p1_b.url
-
-    got = asyncio.run(q.get())
-    assert got.url in {r_low.url, r_p5.url}  # both priority 5; order preserved by insertion counter
-
-    got = asyncio.run(q.get())
-    # last remaining item
-    assert got.url in {r_low.url, r_p5.url}
+    # Use the normalized URLs with trailing slash!
+    assert (await q.get()).url == "http://p1-a.example/"
+    assert (await q.get()).url == "http://p1-b.example/"
+    assert (await q.get()).url == "http://low.example/"
+    assert (await q.get()).url == "http://p5.example/"
 
 
-def test_clear_and_size_behavior() -> None:
+@pytest.mark.asyncio
+async def test_clear_and_size_behavior() -> None:
+    """Test queue size tracking and clear() functionality."""
     q = MemoryPriorityQueue()
 
-    asyncio.run(q.put(Request(url="http://one"), priority=0))
-    asyncio.run(q.put(Request(url="http://two"), priority=0))
+    await q.put(Request(url="http://one"), priority=0)
+    await q.put(Request(url="http://two"), priority=0)
 
-    assert asyncio.run(q.size()) == 2
+    assert await q.size() == 2
 
-    asyncio.run(q.clear())
-    assert asyncio.run(q.size()) == 0
+    await q.clear()
+    assert await q.size() == 0
 
 
-def test_close_makes_put_noop_and_get_raises_cancelled() -> None:
+@pytest.mark.asyncio
+async def test_close_makes_put_noop_and_get_raises_cancelled() -> None:
+    """Test that close() makes put() a no-op and get() raises CancelledError when empty."""
     q = MemoryPriorityQueue()
 
-    # close should mark queue closed
-    asyncio.run(q.close())
+    await q.close()
 
-    # put after close is a no-op (does not raise)
-    asyncio.run(q.put(Request(url="http://ignored"), priority=0))
-    assert asyncio.run(q.size()) == 0
+    # put after close is ignored (no-op)
+    await q.put(Request(url="http://ignored"), priority=0)
+    assert await q.size() == 0
 
-    # get on closed+empty queue should raise asyncio.CancelledError
+    # get on closed + empty queue raises CancelledError
     with pytest.raises(asyncio.CancelledError):
-        asyncio.run(q.get())
+        await q.get()
 
 
-def test_get_raises_runtimeerror_on_decode_failure() -> None:
+@pytest.mark.asyncio
+async def test_get_raises_runtimeerror_on_decode_failure() -> None:
+    """Test that deserialization failures are caught and raise RuntimeError."""
     q = MemoryPriorityQueue()
 
     class BrokenRequest(Request):
         def to_bytes(self) -> bytes:
-            return b"this-is-not-valid-serialized-request"
+            return b"this-is-not-valid-serial to_bytes"
 
         @classmethod
         def from_bytes(cls, data: bytes) -> "BrokenRequest":
             raise RuntimeError("Deserialization failed")
 
-    bad_req = BrokenRequest(url="http://broken.example", priority=0)
+    bad_req = BrokenRequest(url="http://broken.example")
 
-    asyncio.run(q.put(bad_req))
+    await q.put(bad_req)
 
-    with pytest.raises(RuntimeError):
-        asyncio.run(q.get())
+    with pytest.raises(RuntimeError, match="Failed to decode in-memory request payload"):
+        await q.get()

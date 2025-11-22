@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 from typing import TYPE_CHECKING
 
@@ -12,24 +14,23 @@ except ImportError as exc:
     ) from exc
 
 
-# mypy: disable-error-code=unused-ignore
-class RequestStruct(msgspec.Struct, kw_only=True):  # type: ignore[call-arg]
+class RequestStruct(msgspec.Struct):
     """MessagePack-serializable struct mirroring core.Request for queue persistence."""
 
     url: str
-    method: str = "GET"
-    headers: dict[str, str] | None = None
-    cookies: dict[str, str] | None = None
-    body: bytes | None = None
-    priority: int = 0
-    retries: int = 0
-    timeout_ms: int = 10000
-    proxy: str | None = None
-    meta: dict[str, object] | None = None
-    ts: int = 0
+    method: str
+    headers: dict[str, str] | None
+    cookies: dict[str, str] | None
+    body: bytes | None
+    priority: int
+    retries: int
+    timeout_ms: int
+    proxy: str | None
+    meta: dict[str, object] | None
+    ts: int
 
 
-def encode_request(request: "Request") -> bytes:
+def encode_request(request: Request) -> bytes:
     """Encode a Request object to MessagePack bytes for queue persistence.
 
     Args:
@@ -55,7 +56,7 @@ def encode_request(request: "Request") -> bytes:
     return bytes(msgspec.msgpack.encode(struct))
 
 
-def decode_request(data: bytes) -> "Request":
+def decode_request(data: bytes) -> Request:
     """Decode MessagePack bytes back into a Request object.
 
     Args:
@@ -79,11 +80,18 @@ def decode_request(data: bytes) -> "Request":
     if isinstance(body, bytearray):
         body = bytes(body)
 
+    ts = struct.ts or int(time.time() * 1000)
+
     return Request(
         url=struct.url,
         method=struct.method,
         headers=struct.headers or {},
+        cookies=getattr(struct, "cookies", None),
         body=body,
         priority=struct.priority,
+        retries=struct.retries,
+        timeout_ms=struct.timeout_ms,
+        proxy=struct.proxy,
         meta=struct.meta or {},
+        ts=ts,
     )

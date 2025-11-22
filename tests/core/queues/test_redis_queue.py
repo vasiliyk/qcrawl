@@ -80,8 +80,9 @@ def fake_redis_backend() -> str:
     return "tests.core.queues.test_redis_queue.FakeRedisQueue"
 
 
-def test_redis_backend_via_factory_and_basic_order(fake_redis_backend: str) -> None:
-    q = asyncio.run(queue_factory.create_queue(fake_redis_backend))
+@pytest.mark.asyncio
+async def test_redis_backend_via_factory_and_basic_order(fake_redis_backend: str) -> None:
+    q = await queue_factory.create_queue(fake_redis_backend)
 
     # basic priority + FIFO tie-break behavior
     r_low = Request(url="http://low.example")
@@ -89,53 +90,56 @@ def test_redis_backend_via_factory_and_basic_order(fake_redis_backend: str) -> N
     r_p1_a = Request(url="http://p1-a.example")
     r_p1_b = Request(url="http://p1-b.example")
 
-    asyncio.run(q.put(r_low, priority=5))
-    asyncio.run(q.put(r_p1_a, priority=1))
-    asyncio.run(q.put(r_p1_b, priority=1))
-    asyncio.run(q.put(r_p5, priority=5))
+    await q.put(r_low, priority=5)
+    await q.put(r_p1_a, priority=1)
+    await q.put(r_p1_b, priority=1)
+    await q.put(r_p5, priority=5)
 
-    got = asyncio.run(q.get())
+    got = await q.get()
     assert got.url == r_p1_a.url
 
-    got = asyncio.run(q.get())
+    got = await q.get()
     assert got.url == r_p1_b.url
 
-    got = asyncio.run(q.get())
+    got = await q.get()
     assert got.url in {r_low.url, r_p5.url}
 
-    got = asyncio.run(q.get())
+    got = await q.get()
     assert got.url in {r_low.url, r_p5.url}
 
 
-def test_redis_queue_clear_and_size(fake_redis_backend: str) -> None:
-    q = asyncio.run(queue_factory.create_queue(fake_redis_backend))
+@pytest.mark.asyncio
+async def test_redis_queue_clear_and_size(fake_redis_backend: str) -> None:
+    q = await queue_factory.create_queue(fake_redis_backend)
 
-    asyncio.run(q.put(Request(url="http://one"), priority=0))
-    asyncio.run(q.put(Request(url="http://two"), priority=0))
+    await q.put(Request(url="http://one"), priority=0)
+    await q.put(Request(url="http://two"), priority=0)
 
-    assert asyncio.run(q.size()) == 2
+    assert await q.size() == 2
 
-    asyncio.run(q.clear())
-    assert asyncio.run(q.size()) == 0
+    await q.clear()
+    assert await q.size() == 0
 
 
-def test_redis_queue_close_and_cancel(fake_redis_backend: str) -> None:
-    q = asyncio.run(queue_factory.create_queue(fake_redis_backend))
+@pytest.mark.asyncio
+async def test_redis_queue_close_and_cancel(fake_redis_backend: str) -> None:
+    q = await queue_factory.create_queue(fake_redis_backend)
 
     # close should mark queue closed
-    asyncio.run(q.close())
+    await q.close()
 
     # put after close is a no-op
-    asyncio.run(q.put(Request(url="http://ignored"), priority=0))
-    assert asyncio.run(q.size()) == 0
+    await q.put(Request(url="http://ignored"), priority=0)
+    assert await q.size() == 0
 
     # get on closed+empty queue should raise asyncio.CancelledError
     with pytest.raises(asyncio.CancelledError):
-        asyncio.run(q.get())
+        await q.get()
 
 
-def test_redis_queue_raises_runtimeerror_on_decode_failure(fake_redis_backend: str) -> None:
-    q = asyncio.run(queue_factory.create_queue(fake_redis_backend))
+@pytest.mark.asyncio
+async def test_redis_queue_raises_runtimeerror_on_decode_failure(fake_redis_backend: str) -> None:
+    q = await queue_factory.create_queue(fake_redis_backend)
 
     class BrokenRequest(Request):
         def to_bytes(self) -> bytes:
@@ -145,9 +149,9 @@ def test_redis_queue_raises_runtimeerror_on_decode_failure(fake_redis_backend: s
         def from_bytes(cls, data: bytes) -> "BrokenRequest":
             raise RuntimeError("Deserialization failed")
 
-    bad_req = BrokenRequest(url="http://broken.example", priority=0)
+    bad_req = BrokenRequest(url="http://broken.example")
 
-    asyncio.run(q.put(bad_req))
+    await q.put(bad_req)
 
     with pytest.raises(RuntimeError):
-        asyncio.run(q.get())
+        await q.get()
