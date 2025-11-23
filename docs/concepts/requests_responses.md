@@ -3,63 +3,55 @@ qCrawl uses `Request` and `Page` (response) objects to handle HTTP interactions 
 
 ## Request
 
-`Request` is the canonical object used to schedule HTTP work. It carries URL, headers, priority,
+`Request` is the canonical object for instructing the crawler what to fetch. It contains `url`, `headers`, `priority`,
 immutable `body` (bytes), and a `meta` dict for crawler, spider, middleware, and metadata.
 
 
 ### Serialization
 
-!!! warning "Not implemented yet"
-
-    Serialization is not implemented yet. It will be used for persisting requests into queues. I will implement it together with support of Redis backend.
-
-- Use `Request.to_bytes()` to persist requests into queues in binary format using MessagePack.
-- Reconstruct with `Request.from_bytes()` or `Request.from_dict()`; these methods validate types and raise `TypeError` for malformed input.
+- `Request.to_bytes()` serializing to a compact binary format using [Msgspec](https://jcristharif.com/msgspec/).
+- `Request.from_bytes()` or `Request.from_dict()` deserializing; both methods validate types and raise `TypeError` for malformed input.
 
 
-### Best practices
+### Creating and yielding requests
 
-- Always use `Request.copy()` before mutating `meta` or `headers` in middleware or spider code to avoid accidental shared-mutation bugs.
-- `meta` is for internal flags (depth, retry accounting). Avoid putting exportable scraped fields into `meta` (use `Item.data` instead).
-
-
-### Creating and scheduling requests
-
-A `Request` with custom headers is scheduled via scheduler (or yielded from a spider).
+A `Request` with custom headers is yielded from a spider.
 
 ```python
 from qcrawl.core.request import Request
+
 req = Request(
     url="https://example.com/page",
     headers={"X-Custom-Header": "value"},
     priority=5,
     meta={"depth": 2}
 )
-yield req  # from spider parse() or middleware
+yield req  # from spider's parse(), start_requests(), or middleware
 ```
 
 ### Accessing response data
 
-In your spider's `parse()` method, you receive a `Page` object representing the HTTP response. You can access its properties as follows:
+Inside `Spider.parse()`, you receive a `Page` object representing the HTTP response:
 
 ```python
 async def parse(self, response: Page):
     url = response.url
     status = response.status_code
     content = response.content  # bytes
-    headers = response.headers  # dict-like
+    headers = response.headers
+    request = response.request # the original Request object
     # Process the response content...
 ```
 
 ## Page (response)
 
-`Page` is the downloader representation returned by the `Downloader` and received in `Spider.parse()`; it exposes
-`content`, `status_code`, `headers`, `url`, and `request`.
+`Page` is the response object produced by the `Downloader` and passed to `Spider.parse()`.
+It provides convenient access to `content`, `status_code`, `headers`, `url`, `text`, and the originating `request`.
 
 
-### Creating Page objects
+### Creating Page objects (manually)
 
-You typically do not construct Page objects manually; they are produced by the downloader. For tests or middleware
+You typically do not create `Page` objects yourself; they are produced by the downloader. For unit tests or middleware
 mocks you can construct one explicitly:
 
 ```python
@@ -72,3 +64,8 @@ fake_response = Page(
     request=original_request  # optional, link to the originating Request
 )
 ```
+
+### Best practices
+
+- Use `Request.copy()` before mutating `meta` or `headers` in middleware or spider code to avoid accidental shared-mutation bugs.
+- Use `meta` only for crawler-internal flags (depth tracking, retry counters, etc.). Never store scraped data here — use `Item` instead.
