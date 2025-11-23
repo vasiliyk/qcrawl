@@ -1,16 +1,14 @@
 
 You can run spiders programmatically within your Python code or via the command-line interface (CLI) provided by qCrawl.
-Here let's explore CLI usage.
+Here, let's explore CLI usage.
 
-For quick usage example refer to the [5 minutes overview](../getting-started/overview.md).
-For more details on configuration refer to the [Settings documentation](settings.md).
 
 ## Configuration precedence
 qCrawl has the following precedence order for applying settings:
 
 ``` mermaid
 flowchart LR
-    A(qCrawl defaults) --> B(YML Config file) --> C(Environment variables) --> D(CLI) --> E(Programmatic overrides)
+    A(qCrawl defaults) --> B(TOML Config file) --> C(Environment variables) --> D(CLI) --> E(Programmatic overrides)
 ```
 
 ## CLI usage
@@ -41,7 +39,7 @@ qcrawl mymodule:MySpider \
   --setting max_depth=3
 ```
 
-For full list of settings refer to the [Settings documentation](settings.md).
+For the full list of settings, refer to the [Settings documentation](settings.md).
 
 
 ### Output & Export
@@ -56,9 +54,9 @@ For full list of settings refer to the [Settings documentation](settings.md).
 
 ### Configuration File
 
-| Option            | Type  | Default | Description                                                         |
-|-------------------|-------|---------|---------------------------------------------------------------------|
-| `--settings-file` | `str` | `None`  | Load spider settings from JSON/YAML (merged with `--setting` args). |
+| Option            | Type  | Default | Description                                                    |
+|-------------------|-------|---------|----------------------------------------------------------------|
+| `--settings-file` | `str` | `None`  | Load spider settings from TOML (merged with `--setting` args). |
 
 
 ### Logging & Debugging
