@@ -18,6 +18,7 @@ from qcrawl.core.stats import StatsCollector
 from qcrawl.middleware import DownloaderMiddleware
 from qcrawl.middleware.base import SpiderMiddleware
 from qcrawl.utils.fingerprint import RequestFingerprinter
+from qcrawl.utils.settings import resolve_dotted_path
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,8 @@ class Crawler:
 
         self._finalized: bool = False
         self.signals = signals.signals_registry.for_sender(self)
+
+        self._register_default_middlewares()
 
     def add_middleware(self, middleware: object) -> None:
         """Register a middleware before crawl starts.
@@ -322,94 +325,107 @@ class Crawler:
             except Exception:
                 logger.exception("Error clearing spider/engine references")
 
+    def _register_default_middlewares(self) -> None:
+        """Queue middlewares from runtime settings into _pending_middlewares."""
+        try:
+            for setting_name in ("DOWNLOADER_MIDDLEWARES", "SPIDER_MIDDLEWARES"):
+                try:
+                    mapping = getattr(self.runtime_settings, setting_name, None) or {}
+                    if not isinstance(mapping, dict):
+                        continue
+
+                    items = list(mapping.items())
+                    normalized: list[tuple[str, int, int]] = []
+                    for i, (token, order) in enumerate(items):
+                        try:
+                            ord_int = int(order)
+                        except Exception:
+                            logger.debug(
+                                "Skipping middleware %r with non-integer order %r in %s",
+                                token,
+                                order,
+                                setting_name,
+                            )
+                            continue
+                        normalized.append((token, ord_int, i))
+
+                    if not normalized:
+                        continue
+
+                    normalized.sort(key=lambda t: (t[1], t[2]))
+                    for token, _, _ in normalized:
+                        try:
+                            resolved = resolve_dotted_path(token, token_name=f"middleware {token}")
+                            # queue the resolved object (class or callable) or token for later resolution.
+                            self._pending_middlewares.append(resolved)
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to queue %s middleware %s: %s", setting_name, token, e
+                            )
+                except Exception:
+                    logger.exception("Error loading middlewares from settings %s", setting_name)
+        except Exception:
+            logger.exception("Unexpected error in _register_default_middlewares")
+
+    def _register_pending_middlewares(self) -> None:
+        # middleware registration: resolve pending middlewares and install them
+        assert self.engine is not None, "Engine must be initialized before registering middlewares"
+        for mw in list(self._pending_middlewares):
+            try:
+                # Prefer resolving as DownloaderMiddleware
+                try:
+                    dl_inst = self._resolve_downloader_middleware(mw)
+                    self.engine.add_middleware(dl_inst)
+                    continue
+                except TypeError:
+                    # not a downloader middleware, fallthrough to spider middleware
+                    pass
+
+                # Try resolving as SpiderMiddleware
+                try:
+                    sp_inst = self._resolve_spider_middleware(mw)
+                    # append to spider middleware chain managed by MiddlewareManager
+                    self.engine._mw_manager.spider.append(sp_inst)
+                    continue
+                except TypeError:
+                    # not a spider middleware either
+                    pass
+
+                logger.warning("Skipping invalid middleware registration: %r", mw)
+            except Exception:
+                logger.exception("Error registering middleware %r", mw)
+
+        # Clear pending middlewares after registration
+        self._pending_middlewares = []
+
     async def crawl(self) -> None:
         """Execute the full crawl workflow.
 
         Workflow:
-          1. Build RequestFingerprinter using runtime settings.
-          2. Create Downloader, Scheduler, and CrawlEngine.
-          3. Resolve and install pending downloader and spider middlewares.
-          4. Register stats handlers so StatsCollector receives signals.
-          5. Apply per-spider Settings snapshot (Settings.with_overrides) BEFORE middleware open hooks.
+          1. Apply per-spider Settings snapshot (Settings.with_overrides) FIRST.
+          2. Build RequestFingerprinter using runtime settings.
+          3. Create Downloader, Scheduler, and CrawlEngine.
+          4. Resolve and install pending downloader and spider middlewares.
+          5. Register stats handlers so StatsCollector receives signals.
           6. Call middleware.open_spider(), spider.open_spider(), emit spider_opened, then run engine.crawl().
           7. Ensure finalization and cleanup in all cases.
         """
         logger.info(f"Starting spider: {self.spider.name}")
 
         try:
-            # Build base settings and apply per-spider overrides (class and instance custom_settings)
-            base_settings = self.runtime_settings
-            overrides: dict[str, object] = {}
+            # Build final settings FIRST (before creating any components)
+            final_settings = self._build_final_settings()
 
-            # class-level custom_settings
-            cls_cs = getattr(self.spider.__class__, "custom_settings", {}) or {}
-            if isinstance(cls_cs, dict):
-                overrides.update({k: v for k, v in cls_cs.items() if v is not None})
-
-            # instance-level custom_settings (from __init__)
-            inst_cs = getattr(self.spider, "custom_settings", {}) or {}
-            if isinstance(inst_cs, dict):
-                overrides.update({k: v for k, v in inst_cs.items() if v is not None})
-
-            # Filter spider custom_settings to runtime-known keys
-            final_settings: RuntimeSettings | dict[str, object] = base_settings
-            if overrides:
-                try:
-                    # Compute canonical keys present in the runtime snapshot (case-insensitive)
-                    runtime_keys: set[str] = set()
-                    try:
-                        if hasattr(base_settings, "to_dict"):
-                            runtime_keys = {k.upper() for k in base_settings.to_dict()}
-                        elif isinstance(base_settings, dict):
-                            runtime_keys = {k.upper() for k in base_settings}
-                    except Exception:
-                        runtime_keys = set()
-
-                    # Keep only overrides that map to known runtime keys
-                    filtered: dict[str, object] = {}
-                    for k, v in overrides.items():
-                        if isinstance(k, str) and k.upper() in runtime_keys:
-                            filtered[k] = v
-
-                    if filtered:
-                        if hasattr(base_settings, "with_overrides"):
-                            try:
-                                final_settings = base_settings.with_overrides(filtered)
-                            except Exception:
-                                logger.exception(
-                                    "Failed to apply spider custom_settings; using runtime_settings"
-                                )
-                                final_settings = base_settings
-                        else:
-                            # fallback merge if runtime_settings is plain dict-like
-                            try:
-                                merged = (
-                                    dict(base_settings) if isinstance(base_settings, dict) else {}
-                                )
-                                merged.update(filtered)
-                                final_settings = merged
-                            except Exception:
-                                final_settings = base_settings
-                    else:
-                        # No runtime-recognized overrides; keep base_settings unchanged
-                        final_settings = base_settings
-
-                except Exception:
-                    logger.exception(
-                        "Failed to apply spider custom_settings; using runtime_settings"
-                    )
-                    final_settings = base_settings
-
-            # Assign finalized runtime settings to the spider
+            # Assign finalized settings to both spider and crawler
             self.spider.runtime_settings = final_settings  # type: ignore[assignment]
+            self.runtime_settings = final_settings
 
-            # Build RequestFingerprinter (query-param handling moved to middleware)
+            # Create core components using finalized settings
             fingerprinter = RequestFingerprinter()
 
-            # core components (respect per-spider overrides for timeout and downloader settings)
             self.downloader = await Downloader.create(
                 signal_dispatcher=signals.signals_registry,
-                timeout=aiohttp.ClientTimeout(total=getattr(final_settings, "timeout", 180.0)),
+                timeout=aiohttp.ClientTimeout(total=getattr(final_settings, "TIMEOUT", 180.0)),
                 settings=getattr(final_settings, "DOWNLOADER_SETTINGS", None),
             )
 
@@ -425,53 +441,88 @@ class Crawler:
             )
             self.engine.crawler = self
 
-            # wire spider references to engine and crawler
+            # Wire spider references to engine and crawler
             self.spider.engine = self.engine  # type: ignore[assignment]
             self.spider.crawler = self  # type: ignore[assignment]
             self.spider.signals = signals.signals_registry.for_sender(self.spider)  # type: ignore[assignment]
 
-            # middleware registration: resolve pending middlewares and install them
-            for mw in list(self._pending_middlewares):
-                try:
-                    # Prefer resolving as DownloaderMiddleware
-                    try:
-                        dl_inst = self._resolve_downloader_middleware(mw)
-                        self.engine.add_middleware(dl_inst)
-                        continue
-                    except TypeError:
-                        # not a downloader middleware, fallthrough to spider middleware
-                        pass
-
-                    # Try resolving as SpiderMiddleware
-                    try:
-                        sp_inst = self._resolve_spider_middleware(mw)
-                        # append to spider middleware chain managed by MiddlewareManager
-                        self.engine._mw_manager.spider.append(sp_inst)
-                        continue
-                    except TypeError:
-                        # not a spider middleware either
-                        pass
-
-                    logger.warning("Skipping invalid middleware registration: %r", mw)
-                except Exception:
-                    logger.exception("Error registering middleware %r", mw)
-
-            # Clear pending middlewares after registration
-            self._pending_middlewares = []
+            # Register middlewares (they will read from finalized settings via from_crawler)
+            try:
+                self._register_pending_middlewares()
+            except Exception:
+                logger.exception("Failed to register pending middlewares")
 
             self._setup_stats_handlers()
 
-            # lifecycle hooks
+            # Lifecycle hooks and crawl execution
             await self._call_middlewares_open_spider()
             await self.spider.open_spider(self.engine)
             await self.spider.signals.send_async("spider_opened", spider=self.spider)
 
-            # run the engine
+            # Run the engine
             await self.engine.crawl()
 
         finally:
             await self._finalize_spider()
             await self._cleanup_resources()
+
+    def _build_final_settings(self) -> RuntimeSettings:
+        """Build final settings by merging base settings with spider custom_settings.
+
+        Returns:
+            Final settings with spider overrides applied.
+        """
+        base_settings = self.runtime_settings
+        overrides: dict[str, object] = {}
+
+        # Collect class-level custom_settings
+        cls_cs = getattr(self.spider.__class__, "custom_settings", {}) or {}
+        if isinstance(cls_cs, dict):
+            overrides.update({k: v for k, v in cls_cs.items() if v is not None})
+
+        # Collect instance-level custom_settings (from __init__)
+        inst_cs = getattr(self.spider, "custom_settings", {}) or {}
+        if isinstance(inst_cs, dict):
+            overrides.update({k: v for k, v in inst_cs.items() if v is not None})
+
+        # No overrides, return base settings unchanged
+        if not overrides:
+            return base_settings
+
+        try:
+            # Get available runtime setting keys (uppercase)
+            runtime_keys: set[str] = set()
+            try:
+                if hasattr(base_settings, "to_dict"):
+                    runtime_keys = {k.upper() for k in base_settings.to_dict()}
+                elif isinstance(base_settings, dict):
+                    runtime_keys = {k.upper() for k in base_settings}
+            except Exception:
+                logger.warning("Could not read runtime settings keys")
+                return base_settings
+
+            # Filter and normalize overrides to match runtime settings
+            filtered: dict[str, object] = {}
+            for k, v in overrides.items():
+                if isinstance(k, str) and k.upper() in runtime_keys:
+                    filtered[k.upper()] = v  # Normalize to uppercase
+                else:
+                    logger.debug("Spider custom_setting '%s' not in RuntimeSettings, skipping", k)
+
+            # No valid overrides found
+            if not filtered:
+                return base_settings
+
+            # Apply overrides using Settings.with_overrides()
+            try:
+                return base_settings.with_overrides(filtered)
+            except Exception:
+                logger.exception("Failed to apply spider custom_settings; using base settings")
+                return base_settings
+
+        except Exception:
+            logger.exception("Error building final settings; using base settings")
+            return base_settings
 
     def _setup_stats_handlers(self) -> None:
         """Connect stats collector to global signals dispatcher defensively."""

@@ -152,6 +152,10 @@ class HttpProxyMiddleware(DownloaderMiddleware):
 
         request.meta["proxy"] = proxy_url
 
+        # Stats: proxy used
+        spider.crawler.stats.inc_counter("proxy/requests")
+        spider.crawler.stats.inc_counter(f"proxy/requests/{scheme}")
+
         # Log safe proxy URL (hide credentials)
         try:
             parsed = urlparse(proxy_url)
@@ -160,19 +164,42 @@ class HttpProxyMiddleware(DownloaderMiddleware):
             safe_url = f"{parsed.scheme}://{safe_host}:{safe_port}"
         except Exception:
             safe_url = proxy_url
-        logger.debug("Using proxy %s for %s", safe_url, request.url)
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Using proxy %s for %s", safe_url, request.url)
 
         return MiddlewareResult.continue_()
 
     async def process_response(
         self, request: Request, response, spider: "Spider"
     ) -> MiddlewareResult:
+        if "proxy" in request.meta:
+            if 200 <= response.status_code < 400:
+                spider.crawler.stats.inc_counter("proxy/success")
+            else:
+                spider.crawler.stats.inc_counter("proxy/failure")
+
         # No response-time proxy handling; continue processing
         return MiddlewareResult.continue_()
 
     async def process_exception(
         self, request: Request, exception: BaseException, spider: "Spider"
     ) -> MiddlewareResult:
+        if "proxy" in request.meta:
+            spider.crawler.stats.inc_counter("proxy/errors")
+            try:
+                proxy = request.meta["proxy"]
+                if not isinstance(proxy, str):
+                    raise TypeError(
+                        f"Proxy URL must be a string, got {type(proxy).__name__}. "
+                        f"Please provide proxy URL in string format (e.g., 'http://proxy.example.com:8080')"
+                    )
+                parsed = urlparse(proxy)
+                key = f"{parsed.hostname}:{parsed.port or 8080}"
+                spider.crawler.stats.inc_counter(f"proxy/errors/{key}")
+            except Exception:
+                pass
+
         # Not handling exceptions here; let other middlewares decide
         return MiddlewareResult.continue_()
 
@@ -197,3 +224,12 @@ class HttpProxyMiddleware(DownloaderMiddleware):
         proxy_raw = self._get_setting(spider, proxy_key, proxy_default)
 
         return proxy_raw if isinstance(proxy_raw, str) else None
+
+    async def open_spider(self, spider: "Spider") -> None:
+        """Log configured proxy parameters when the spider opens."""
+        logger.info(
+            "http_proxy: %s, https_proxy: %s, no_proxy: %s",
+            self.http_proxy or "None",
+            self.https_proxy or "None",
+            self.no_proxy or "None",
+        )

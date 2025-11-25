@@ -111,11 +111,15 @@ class HttpAuthMiddleware(DownloaderMiddleware):
             body = request.body or b""
             body_hash = hashlib.md5(body).hexdigest()
             ha2 = hashlib.md5(f"{method}:{uri}:{body_hash}".encode()).hexdigest()
-            logger.debug("qop=auth-int: hashed %d-byte body", len(body))
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("qop=auth-int: hashed %d-byte body", len(body))
         else:
             ha2 = hashlib.md5(f"{method}:{uri}".encode()).hexdigest()
             if qop == "auth-int":
-                logger.debug("qop=auth-int requested but disabled (performance). Using qop=auth.")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "qop=auth-int requested but disabled (performance). Using qop=auth."
+                    )
                 qop = "auth"  # downgrade
 
         # Response
@@ -182,7 +186,9 @@ class HttpAuthMiddleware(DownloaderMiddleware):
         request.headers = dict(request.headers) if request.headers is not None else {}
         request.headers["Authorization"] = auth_header
 
-        logger.debug("Added HTTP Basic auth for %s (user: %s)", request.url, username)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Added HTTP Basic auth for %s (user: %s)", request.url, username)
+
         return MiddlewareResult.continue_()
 
     async def process_response(
@@ -205,7 +211,9 @@ class HttpAuthMiddleware(DownloaderMiddleware):
 
         # Prevent infinite retry loop
         if request.meta.get("_digest_retry"):
-            logger.debug("Already retried with Digest auth for %s; not retrying", request.url)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Already retried with Digest auth for %s; not retrying", request.url)
+
             return MiddlewareResult.keep(response)
 
         # Get credentials (per-request or per-domain)
@@ -215,7 +223,9 @@ class HttpAuthMiddleware(DownloaderMiddleware):
             auth_tuple = self._credentials.get(domain)
 
         if auth_tuple is None:
-            logger.debug("No credentials for 401 response from %s", request.url)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("No credentials for 401 response from %s", request.url)
+
             return MiddlewareResult.keep(response)
 
         if not isinstance(auth_tuple, (tuple, list)) or len(auth_tuple) != 2:
@@ -272,7 +282,9 @@ class HttpAuthMiddleware(DownloaderMiddleware):
         new_req.meta = dict(new_req.meta)
         new_req.meta["_digest_retry"] = True
 
-        logger.debug("Retrying %s with Digest auth (user: %s)", request.url, username)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Retrying %s with Digest auth (user: %s)", request.url, username)
+
         return MiddlewareResult.retry(new_req)
 
     async def process_exception(
@@ -294,3 +306,11 @@ class HttpAuthMiddleware(DownloaderMiddleware):
         """Clear all stored credentials."""
         self._credentials.clear()
         self._digest_challenges.clear()
+
+    async def open_spider(self, spider: "Spider") -> None:
+        logger.info(
+            "credentials: %d domains, auth_type: %s, digest_qop_auth_int: %s",
+            len(self._credentials),
+            self.auth_type,
+            self.digest_qop_auth_int,
+        )

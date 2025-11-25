@@ -84,32 +84,35 @@ class HttpErrorMiddleware(SpiderMiddleware):
         """Log configuration when spider opens (lifecycle hook)."""
         allowed_codes = self._get_allowed_codes(spider)
         if allowed_codes is None:
-            logger.info("HttpErrorMiddleware: all status codes allowed")
-            return
+            logger.info("all status codes allowed")
+        elif not allowed_codes:
+            logger.info("no status codes allowed (will drop all responses)")
+        else:
+            # join integers safely
+            logger.info(
+                "allowed status codes: %s", ", ".join(str(c) for c in sorted(allowed_codes))
+            )
 
-        if not allowed_codes:
-            logger.info("HttpErrorMiddleware: no status codes allowed (will drop all responses)")
-            return
+        if logger.isEnabledFor(logging.DEBUG) and allowed_codes:
+            sorted_codes = sorted(allowed_codes)
+            ranges: list[str] = []
+            start = sorted_codes[0]
+            prev = start
 
-        sorted_codes = sorted(allowed_codes)
-        ranges: list[str] = []
-        start = sorted_codes[0]
-        prev = start
-
-        for code in sorted_codes[1:] + [None]:
-            if code is None or code != prev + 1:
-                if start == prev:
-                    ranges.append(str(start))
-                else:
-                    ranges.append(f"{start}-{prev}")
+            for code in sorted_codes[1:] + [None]:
+                if code is None or code != prev + 1:
+                    if start == prev:
+                        ranges.append(str(start))
+                    else:
+                        ranges.append(f"{start}-{prev}")
+                    if code is not None:
+                        start = code
                 if code is not None:
-                    start = code
-            if code is not None:
-                prev = code
+                    prev = code
 
-        logger.info("HttpErrorMiddleware: allowed_codes=[%s]", ", ".join(ranges))
+            logger.debug("HttpErrorMiddleware: allowed_codes=[%s]", ", ".join(ranges))
 
     async def close_spider(self, spider: "Spider") -> None:
         """Log statistics when spider closes (lifecycle hook)."""
         if self._filtered_count > 0:
-            logger.info("Filtered %d error responses", self._filtered_count)
+            spider.crawler.stats.set_counter("httperror/filtered", self._filtered_count)

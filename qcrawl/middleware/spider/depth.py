@@ -146,13 +146,11 @@ class DepthMiddleware(SpiderMiddleware):
     async def open_spider(self, spider: "Spider") -> None:
         """Log configured depth when spider opens."""
 
-        if logger.isEnabledFor(logging.DEBUG):
-            max_depth = self._get_max_depth(spider)
-
-            if max_depth > 0:
-                logger.info("DepthMiddleware: max_depth=%d", max_depth)
-            else:
-                logger.info("DepthMiddleware: unlimited depth")
+        max_depth: int = self._get_max_depth(spider)
+        if max_depth > 0:
+            logger.info("max_depth=%d", max_depth)
+        else:
+            logger.info("unlimited depth")
 
     async def close_spider(self, spider) -> None:
         """Emit depth statistics."""

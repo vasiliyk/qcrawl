@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import importlib
 import os
 import tomllib
 from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import orjson
+
+if TYPE_CHECKING:
+    from qcrawl.settings import Settings
 
 
 def ensure_int(value: object, name: str, *, allow_none: bool = False) -> int | None:
@@ -218,3 +223,50 @@ def shallow_merge_dicts(base: dict[str, object], overrides: dict[str, object]) -
         else:
             merged[k] = v
     return merged
+
+
+def get_setting(snapshot: Settings | dict[str, object] | None, name: str) -> object:
+    """Case-insensitive lookup for a Settings-like snapshot or plain dict.
+
+    - For dict snapshots: compare keys by uppercasing (return first matching value).
+    - For objects: lookup attribute using the UPPERCASE name only (no lowercase fallback).
+    """
+    if snapshot is None:
+        return None
+    if not isinstance(name, str):
+        name = str(name)
+    key_up = name.upper()
+
+    if isinstance(snapshot, dict):
+        for k, v in snapshot.items():
+            if isinstance(k, str) and k.upper() == key_up:
+                return v
+        return None
+
+    if hasattr(snapshot, key_up):
+        return getattr(snapshot, key_up)
+    return None
+
+
+def resolve_dotted_path(token: object, *, token_name: str = "token") -> object:
+    """Resolve a dotted-path string `module.Class` to the attribute, or return token unchanged.
+
+    - If `token` is not a string it is returned unchanged (supports programmatic objects).
+    - If `token` is a string it must contain a module part ('.'); non-dotted strings raise
+      ValueError, import failures raise ImportError.
+    """
+    if not isinstance(token, str):
+        return token
+    tok = ensure_str(token, token_name)
+    assert tok is not None  # ensure_str with allow_none=False never returns None
+    if "." not in tok:
+        raise ValueError(f"Invalid dotted path (no module part): {tok!r}")
+    module_name, cls_name = tok.rsplit(".", 1)
+    try:
+        mod = importlib.import_module(module_name)
+    except Exception as exc:
+        raise ImportError(f"Could not import module {module_name!r}") from exc
+    try:
+        return getattr(mod, cls_name)
+    except AttributeError as exc:
+        raise ImportError(f"Module {module_name!r} has no attribute {cls_name!r}") from exc

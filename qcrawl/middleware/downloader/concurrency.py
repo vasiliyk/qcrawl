@@ -13,147 +13,106 @@ logger = logging.getLogger(__name__)
 
 
 class _DomainSlot:
-    __slots__ = ("domain", "semaphore", "active")
+    """Per-domain concurrency control using a semaphore."""
+
+    __slots__ = ("domain", "semaphore")
 
     def __init__(self, domain: str, concurrency: int) -> None:
         self.domain = domain
         self.semaphore = asyncio.Semaphore(concurrency)
-        self.active = 0
 
     async def acquire(self) -> None:
+        """Acquire a slot for this domain."""
         await self.semaphore.acquire()
-        self.active += 1
 
     def release(self) -> None:
-        if self.active <= 0:
-            logger.warning("Domain concurrency release underflow for %s", self.domain)
-            self.active = 0
-        else:
-            self.active -= 1
+        """Release a slot for this domain."""
         try:
             self.semaphore.release()
-        except Exception:
-            logger.exception("Domain semaphore.release() failed for %s", self.domain)
+        except ValueError:
+            # Semaphore release called too many times
+            logger.warning("Semaphore release underflow for domain %s", self.domain)
 
 
 class ConcurrencyMiddleware(DownloaderMiddleware):
-    """Per-domain concurrency semaphore middleware.
+    """Per-domain concurrency limiter using semaphores.
 
-    Arguments:
-        concurrency_per_domain: max concurrent requests per domain
-
-    Notes:
-      - Honors per-spider override `concurrency_per_domain` when present.
-      - Resets internal slot table on spider open to avoid cross-run leakage.
+    Ensures at most N concurrent requests per domain, where N is
+    configurable via concurrency_per_domain (default: 2).
     """
 
     def __init__(self, concurrency_per_domain: int = 2) -> None:
-        try:
-            val = int(concurrency_per_domain)
-        except Exception:
-            raise TypeError("concurrency_per_domain must be an int") from None
-        if val < 1:
-            raise ValueError("concurrency_per_domain must be >= 1")
-        self._default_concurrency = val
-        self._concurrency = val
+        if not isinstance(concurrency_per_domain, int) or concurrency_per_domain < 1:
+            raise ValueError("concurrency_per_domain must be an integer >= 1")
+
+        self._concurrency = concurrency_per_domain
         self._slots: dict[str, _DomainSlot] = {}
 
-    def _domain_key(self, url: str) -> str:
+    @classmethod
+    def from_crawler(cls, crawler):
+        """Create middleware instance from crawler, reading settings.
+
+        Args:
+            crawler: Crawler instance with runtime_settings
+
+        Returns:
+            ConcurrencyMiddleware instance configured from settings
+        """
+        settings = crawler.runtime_settings
+        concurrency = getattr(settings, "CONCURRENCY_PER_DOMAIN", 2)
+        return cls(concurrency_per_domain=concurrency)
+
+    def _get_domain(self, url: str) -> str:
+        """Extract domain from URL, fallback to 'default' on error."""
         try:
-            d = get_domain(url)
-            return d or "default"
+            domain = get_domain(url)
+            return domain or "default"
         except Exception:
             return "default"
 
     def _get_slot(self, url: str) -> _DomainSlot:
-        key = self._domain_key(url)
-        slot = self._slots.get(key)
-        if slot is None:
-            slot = _DomainSlot(key, self._concurrency)
-            self._slots[key] = slot
-        return slot
+        """Get or create a domain slot for the given URL."""
+        domain = self._get_domain(url)
+        if domain not in self._slots:
+            self._slots[domain] = _DomainSlot(domain, self._concurrency)
+        return self._slots[domain]
 
     async def process_request(self, request: "Request", spider: "Spider") -> MiddlewareResult:
+        """Acquire a concurrency slot before processing the request."""
         slot = self._get_slot(request.url)
         await slot.acquire()
-        if request.meta is None:
+
+        # Store slot reference in request metadata for later release
+        if not hasattr(request, "meta") or request.meta is None:
             request.meta = {}
-        request.meta["_domain_concurrency_key"] = slot.domain
+        request.meta["_concurrency_slot"] = slot
+
         return MiddlewareResult.continue_()
 
     async def process_response(
         self, request: "Request", response, spider: "Spider"
     ) -> MiddlewareResult:
-        meta = getattr(request, "meta", None)
-        slot_key = None
-        if isinstance(meta, dict):
-            slot_key = meta.pop("_domain_concurrency_key", None)
-
-        if isinstance(slot_key, str):
-            slot = self._slots.get(slot_key)
-            if slot:
-                try:
-                    slot.release()
-                except Exception:
-                    logger.exception("Failed to release domain concurrency slot %s", slot_key)
+        """Release the concurrency slot after processing the response."""
+        self._release_slot(request)
         return MiddlewareResult.keep(response)
 
     async def process_exception(
-        self, request: "Request", exception, spider: "Spider"
+        self, request: "Request", exception: BaseException, spider: "Spider"
     ) -> MiddlewareResult:
-        meta = getattr(request, "meta", None)
-        slot_key = None
-        if isinstance(meta, dict):
-            slot_key = meta.pop("_domain_concurrency_key", None)
-
-        if isinstance(slot_key, str):
-            slot = self._slots.get(slot_key)
-            if slot:
-                try:
-                    slot.release()
-                except Exception:
-                    logger.exception(
-                        "Failed to release domain concurrency slot %s on exception", slot_key
-                    )
+        """Release the concurrency slot when an exception occurs."""
+        self._release_slot(request)
         return MiddlewareResult.continue_()
 
+    def _release_slot(self, request: "Request") -> None:
+        """Safely release the concurrency slot stored in request metadata."""
+        if not hasattr(request, "meta") or not isinstance(request.meta, dict):
+            return
+
+        slot = request.meta.pop("_concurrency_slot", None)
+        if isinstance(slot, _DomainSlot):
+            slot.release()
+
     async def open_spider(self, spider: "Spider") -> None:
-        """Lifecycle hook: honor per-spider override and reset slots."""
-        try:
-            per_spider = getattr(spider, "concurrency_per_domain", None)
-            if per_spider is not None:
-                try:
-                    per_spider_val = int(per_spider)
-                    if per_spider_val >= 1:
-                        self._concurrency = per_spider_val
-                    else:
-                        self._concurrency = self._default_concurrency
-                except Exception:
-                    self._concurrency = self._default_concurrency
-            else:
-                self._concurrency = self._default_concurrency
-
-            # Reset slots to ensure a fresh semaphore pool for this spider run.
-            self._slots = {}
-            logger.debug(
-                "ConcurrencyMiddleware opened for spider %s: concurrency_per_domain=%d",
-                getattr(spider, "name", "<unknown>"),
-                self._concurrency,
-            )
-        except Exception:
-            logger.exception("Error in ConcurrencyMiddleware.open_spider")
-
-    async def close_spider(self, spider: "Spider") -> None:
-        """Lifecycle hook: log active slots and clear internal state."""
-        try:
-            active_slots = {k: v.active for k, v in self._slots.items() if v.active > 0}
-            if active_slots:
-                logger.debug(
-                    "ConcurrencyMiddleware closing for %s; active slots remaining: %r",
-                    getattr(spider, "name", "<unknown>"),
-                    active_slots,
-                )
-            # Clear slots to allow GC and avoid cross-spider leakage
-            self._slots = {}
-        except Exception:
-            logger.exception("Error in ConcurrencyMiddleware.close_spider")
+        """Reset slots when spider opens."""
+        self._slots.clear()
+        logger.info("concurrency_per_domain=%d", self._concurrency)

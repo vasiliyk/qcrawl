@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import logging
 from collections.abc import AsyncIterator
@@ -211,10 +212,34 @@ class CrawlEngine:
                 response = await self._process_request(request)
                 if response:
                     await self._process_parse_results(request, response)
+            except asyncio.CancelledError as exc:
+                # Cancellation during request processing must still notify downloader
+                # middlewares so they can release resources (e.g. concurrency semaphores).
+                try:
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "Worker %s cancelled while processing %s; invoking process_exception chain",
+                            worker_id,
+                            getattr(request, "url", None),
+                        )
+                    # Run exception chain in reverse middleware order with the CancelledError payload
+                    with contextlib.suppress(Exception):
+                        await self._run_middleware_chain(
+                            "process_exception", request, self._reversed_mws, exc
+                        )
+                except Exception:
+                    logger.exception(
+                        "Error running middleware process_exception chain on CancelledError for %s",
+                        getattr(request, "url", None),
+                    )
+                break
             except Exception as exc:
                 await self._handle_exception(request, exc)
             finally:
-                self.scheduler.task_done()
+                try:
+                    self.scheduler.task_done()
+                except Exception:
+                    logger.exception("Error calling scheduler.task_done() in worker %s", worker_id)
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Worker %s stopped", worker_id)
@@ -254,48 +279,56 @@ class CrawlEngine:
         chain: list[DownloaderMiddleware],
         initial_payload: object | None = None,
     ) -> MiddlewareResult:
-        """Run a downloader middleware chain."""
+        """Run a downloader middleware chain.
+
+        Process each middleware in sequence. For response chains, both KEEP and
+        CONTINUE allow processing to continue. Only RETRY and DROP short-circuit.
+        """
+        current_payload = initial_payload
+
         for mw in chain:
             method = getattr(mw, method_name)
-            result = (
-                await method(request, initial_payload, self.spider)
-                if initial_payload is not None
-                else await method(request, self.spider)
-            )
+
+            # Call middleware method with or without payload
+            if current_payload is not None:
+                result = await method(request, current_payload, self.spider)
+            else:
+                result = await method(request, self.spider)
 
             if not isinstance(result, MiddlewareResult):
                 raise TypeError(
-                    f"{mw.__class__.__name__}.{method_name} must return MiddlewareResult, got {type(result)!r}"
+                    f"{mw.__class__.__name__}.{method_name} must return MiddlewareResult"
                 )
 
-            if result.action is not Action.CONTINUE:
+            # Short-circuit on RETRY or DROP
+            if result.action in (Action.RETRY, Action.DROP):
                 if logger.isEnabledFor(logging.DEBUG):
-                    payload_preview = None
-                    try:
-                        if result.payload is not None:
-                            payload_preview = repr(result.payload)[:200]
-                    except Exception:
-                        payload_preview = "<unreprable>"
                     logger.debug(
-                        "middleware %s.%s -> %s (mw=%s payload=%s)",
+                        "middleware %s.%s -> %s (mw=%s)",
                         method_name,
                         getattr(request, "url", None),
                         result.action.name,
                         mw.__class__.__name__,
-                        payload_preview,
                     )
                 return result
 
+            # Log and continue for KEEP or CONTINUE
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
-                    "middleware %s CONTINUE (mw=%s url=%s)",
+                    "middleware %s %s (mw=%s url=%s)",
                     method_name,
+                    result.action.name,
                     mw.__class__.__name__,
                     getattr(request, "url", None),
                 )
 
-        if initial_payload is not None and isinstance(initial_payload, Page):
-            return MiddlewareResult.keep(initial_payload)
+            # Update payload for next middleware
+            if result.payload is not None:
+                current_payload = result.payload
+
+        # All middlewares processed - return final result
+        if isinstance(current_payload, Page):
+            return MiddlewareResult.keep(current_payload)
         return MiddlewareResult.continue_()
 
     async def _handle_retry_or_drop(

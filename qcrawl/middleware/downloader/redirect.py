@@ -127,10 +127,14 @@ class RedirectMiddleware(DownloaderMiddleware):
 
         if redirects > self.max_redirects:
             logger.info(
-                "Max redirects (%d) exceeded for %s",
-                self.max_redirects,
+                "Discarding <%s, %s>: max redirects (%d) reached.",
+                request.method,
                 response.url,
+                self.max_redirects,
             )
+
+            spider.crawler.stats.inc_counter("redirect/max_reached")
+
             return MiddlewareResult.keep(response)
 
         # Prepare redirect_urls: if present it must be a list
@@ -154,13 +158,18 @@ class RedirectMiddleware(DownloaderMiddleware):
         new_req.meta["redirect_urls"] = redirect_urls
         new_req.meta["redirects"] = redirects
 
-        logger.debug(
-            "Redirecting %s → %s (status=%s, hop=%d/%d)",
-            response.url,
-            new_url,
-            response.status_code,
-            redirects,
-            self.max_redirects,
-        )
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Redirecting %s → %s (status=%s, hop=%d/%d)",
+                response.url,
+                new_url,
+                response.status_code,
+                redirects,
+                self.max_redirects,
+            )
 
         return MiddlewareResult.retry(new_req)
+
+    async def open_spider(self, spider: "Spider") -> None:
+        """Log configured redirect parameters when the spider opens."""
+        logger.info("max_redirects: %d", self.max_redirects)

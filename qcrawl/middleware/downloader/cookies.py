@@ -53,7 +53,9 @@ class CookiesMiddleware(DownloaderMiddleware):
             # Make a copy before mutating headers
             request.headers = dict(request.headers) if request.headers is not None else {}
             request.headers["Cookie"] = cookie_header
-            logger.debug("Added cookies to %s: %s", request.url, cookie_header)
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Added cookies to %s: %s", request.url, cookie_header)
 
         return MiddlewareResult.continue_()
 
@@ -76,10 +78,13 @@ class CookiesMiddleware(DownloaderMiddleware):
             cookie = SimpleCookie()
             try:
                 cookie.load(header)
-                # update preserves existing jar entries
                 cookie_jar.update(cookie)
-                logger.debug("Stored cookie from %s: %s", domain, header)
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Stored cookie from %s: %s", domain, header)
+
             except Exception as exc:
+                spider.crawler.stats.inc_counter("cookies/errors")
                 logger.warning(
                     "Failed to parse Set-Cookie header %r for %s: %s", header, request.url, exc
                 )
@@ -98,27 +103,16 @@ class CookiesMiddleware(DownloaderMiddleware):
             spider_id = self._get_spider_id(spider)
             # Replace existing entry with a fresh per-domain mapping
             self._cookies[spider_id] = defaultdict(SimpleCookie)
-            logger.debug(
-                "CookiesMiddleware opened for spider %s", getattr(spider, "name", "<unknown>")
-            )
+
+            logger.info("started")
+
         except Exception:
             logger.exception("Error in CookiesMiddleware.open_spider")
 
     async def close_spider(self, spider: "Spider") -> None:
         """Async lifecycle hook: clear per-spider cookie jars on spider close."""
-        try:
-            spider_id = self._get_spider_id(spider)
-            jars = self._cookies.pop(spider_id, None)
-            if jars:
-                total = sum(len(j) for j in jars.values())
-                if total:
-                    logger.debug(
-                        "CookiesMiddleware closing for %s; cookies stored: %d",
-                        getattr(spider, "name", "<unknown>"),
-                        total,
-                    )
-        except Exception:
-            logger.exception("Error in CookiesMiddleware.close_spider")
+        spider_id = self._get_spider_id(spider)
+        self._cookies.pop(spider_id, None)
 
     def clear_cookies(self, spider: "Spider | None" = None, domain: str | None = None) -> None:
         """Clear cookies for spider/domain (sync helper)."""

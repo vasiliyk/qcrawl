@@ -139,7 +139,7 @@ class XmlExporter:
     """
 
     def __init__(self) -> None:
-        self.items: list[dict[str, str]] = []
+        self.items: list[dict[str, object]] = []
 
     def serialize_item(self, item: Item) -> None:
         data = item.data if hasattr(item, "data") else item

@@ -25,8 +25,7 @@ class OffsiteMiddleware(SpiderMiddleware):
         - Emits `request_dropped` signal for stats when a request is filtered
     """
 
-    def __init__(self, enabled: bool = True) -> None:
-        self.enabled = enabled
+    def __init__(self) -> None:
         self._dropped_count = 0
 
     def _normalize_domain(self, netloc: str) -> str:
@@ -102,10 +101,6 @@ class OffsiteMiddleware(SpiderMiddleware):
         Yields items and onsite requests. Converts `str` results to `Request`
         and preserves depth information from `response.request.meta`.
         """
-        if not self.enabled:
-            async for item in result:
-                yield item
-            return
 
         allowed_domains = self._get_allowed_domains(spider)
         if allowed_domains is None:
@@ -135,12 +130,15 @@ class OffsiteMiddleware(SpiderMiddleware):
                 # Check offsite
                 if self._is_offsite(req.url, allowed_domains):
                     self._dropped_count += 1
-                    logger.debug(
-                        "Filtered offsite request to %s: %s (allowed: %s)",
-                        self._extract_domain(req.url),
-                        req.url,
-                        ", ".join(sorted(allowed_domains)),
-                    )
+
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "Filtered offsite request to %s: %s (allowed: %s)",
+                            self._extract_domain(req.url),
+                            req.url,
+                            ", ".join(sorted(allowed_domains)),
+                        )
+
                     # Emit request_dropped signal for stats if available
                     dispatcher = getattr(spider, "signals", None)
                     try:
@@ -161,12 +159,15 @@ class OffsiteMiddleware(SpiderMiddleware):
             if isinstance(item, str):
                 if self._is_offsite(item, allowed_domains):
                     self._dropped_count += 1
-                    logger.debug(
-                        "Filtered offsite request to %s: %s (allowed: %s)",
-                        self._extract_domain(item),
-                        item,
-                        ", ".join(sorted(allowed_domains)),
-                    )
+
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "Filtered offsite request to %s: %s (allowed: %s)",
+                            self._extract_domain(item),
+                            item,
+                            ", ".join(sorted(allowed_domains)),
+                        )
+
                     dispatcher = getattr(spider, "signals", None)
                     try:
                         if dispatcher is not None:
@@ -186,21 +187,16 @@ class OffsiteMiddleware(SpiderMiddleware):
             # Unknown type: pass through unchanged
             yield item
 
-    async def spider_opened(self, spider: "Spider") -> None:
+    async def open_spider(self, spider: "Spider") -> None:
         """Log configured allowed domains when spider opens."""
-        if not self.enabled:
-            logger.info("OffsiteMiddleware: disabled")
-            return
 
         allowed_domains = self._get_allowed_domains(spider)
         if allowed_domains is None:
-            logger.info("OffsiteMiddleware: all domains allowed")
+            logger.info("all domains allowed")
         elif allowed_domains:
-            logger.info("OffsiteMiddleware: allowed_domains=%s", ", ".join(sorted(allowed_domains)))
-        else:
-            logger.warning("OffsiteMiddleware: no allowed domains configured")
+            logger.info("allowed_domains=%s", ", ".join(sorted(allowed_domains)))
 
-    async def spider_closed(self, spider: "Spider") -> None:
+    async def close_spider(self, spider: "Spider") -> None:
         """Log offsite statistics when spider closes."""
         if self._dropped_count > 0:
-            logger.info("Filtered %d offsite requests", self._dropped_count)
+            spider.crawler.stats.set_counter("offsite/filtered", self._dropped_count)

@@ -38,7 +38,7 @@ class Item:
     __slots__ = ("_data", "_metadata")
 
     def __init__(
-        self, data: dict[str, str] | None = None, metadata: dict[str, str] | None = None
+        self, data: dict[str, object] | None = None, metadata: dict[str, object] | None = None
     ) -> None:
         """Create a new Item (scraped fields and internal metadata).
 
@@ -49,11 +49,11 @@ class Item:
         Raises:
             None. Defensive callers should validate their inputs before constructing.
         """
-        self._data: dict[str, str] = data or {}
-        self._metadata: dict[str, str] = metadata or {}
+        self._data: dict[str, object] = data or {}
+        self._metadata: dict[str, object] = metadata or {}
 
     @property
-    def data(self) -> dict[str, str]:
+    def data(self) -> dict[str, object]:
         """Return the main data mapping (scraped fields e.g., title, price).
 
         Mutating the returned dict changes the Item in-place.
@@ -61,20 +61,20 @@ class Item:
         return self._data
 
     @property
-    def metadata(self) -> dict[str, str]:
+    def metadata(self) -> dict[str, object]:
         """Return the internal metadata mapping (e.g., crawler depth, timestamp)."""
         return self._metadata
 
     def __repr__(self) -> str:
         return f"Item(data={self._data!r}, metadata={self._metadata!r})"
 
-    def __getitem__(self, key: str) -> str:
+    def __getitem__(self, key: str) -> object:
         return self._data[key]
 
-    def __setitem__(self, key: str, value: str) -> None:
+    def __setitem__(self, key: str, value: object) -> None:
         self._data[key] = value
 
-    def get(self, key: str, default: str) -> str:
+    def get(self, key: str, default: object = None) -> object:
         """Return `.data.get(key, default)`.
 
         Convenience wrapper matching the dict API.
@@ -95,10 +95,10 @@ class Item:
         """Return a view over `.data` keys."""
         return self._data.keys()
 
-    def values(self) -> ValuesView[str]:
+    def values(self) -> ValuesView[object]:
         """Return a view over `.data` values."""
         return self._data.values()
 
-    def items(self) -> ItemsView[str, str]:
+    def items(self) -> ItemsView[str, object]:
         """Iterate over field names (keys) in `.data` to support `for k in item`."""
         return self._data.items()

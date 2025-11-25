@@ -105,19 +105,22 @@ class HttpCompressionMiddleware(DownloaderMiddleware):
                         body = zlib.decompress(body, -zlib.MAX_WBITS)
                 elif enc in ("zstd", "zstandard"):
                     if not self.enable_zstd:
-                        logger.debug(
-                            "Received zstd content but zstd support unavailable; skipping decompression"
-                        )
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug(
+                                "Received zstd content but zstd support unavailable; skipping decompression"
+                            )
                         # Cannot decompress - keep original response
                         return MiddlewareResult.keep(response)
                     body = _decompress_zstd(body)
                 else:
                     # Unknown encoding: skip processing and return as-is
-                    logger.debug(
-                        "Unknown Content-Encoding %r for %s; skipping decompression",
-                        enc,
-                        request.url,
-                    )
+
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "Unknown Content-Encoding %r for %s; skipping decompression",
+                            enc,
+                            request.url,
+                        )
                     return MiddlewareResult.keep(response)
         except Exception:
             logger.exception("Failed to decompress %s (encodings=%r)", request.url, encs)
@@ -144,7 +147,9 @@ class HttpCompressionMiddleware(DownloaderMiddleware):
             encoding=None,
         )
 
-        logger.debug("Decompressed %s: removed %s", request.url, ce)
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Decompressed %s: removed %s", request.url, ce)
+
         return MiddlewareResult.keep(new_page)
 
     async def process_exception(
@@ -152,3 +157,6 @@ class HttpCompressionMiddleware(DownloaderMiddleware):
     ) -> MiddlewareResult:
         # No special exception handling
         return MiddlewareResult.continue_()
+
+    async def open_spider(self, spider: "Spider") -> None:
+        logger.info("started")

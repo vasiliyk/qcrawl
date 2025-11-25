@@ -96,3 +96,6 @@ class DownloadDelayMiddleware(DownloaderMiddleware):
             except Exception:
                 logger.exception("Failed to update last-download time %s on exception", slot_key)
         return MiddlewareResult.continue_()
+
+    async def open_spider(self, spider: "Spider") -> None:
+        logger.info("delay_per_domain: %.3f seconds", self._delay)

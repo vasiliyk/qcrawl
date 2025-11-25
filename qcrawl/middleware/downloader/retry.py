@@ -133,24 +133,26 @@ class RetryMiddleware(DownloaderMiddleware):
 
         retry_count = self._get_retry_count(request)
         if retry_count >= self.max_retries:
-            logger.debug(
-                "RetryMiddleware: max retries reached for %s (%d)",
-                request.url,
-                retry_count,
-            )
+            spider.crawler.stats.inc_counter("downloader/retry/max_reached")
+            spider.crawler.stats.inc_counter("downloader/retry/network_error")
             return MiddlewareResult.drop()
 
         delay = self._compute_delay(retry_count, None)
-
-        logger.debug(
-            "RetryMiddleware: retrying %s due to exception %s (delay=%.1fs, attempt %d/%d)",
-            request.url,
-            type(exception).__name__,
-            delay,
-            retry_count + 1,
-            self.max_retries,
+        spider.crawler.stats.inc_counter("downloader/retry/total")
+        spider.crawler.stats.inc_counter("downloader/retry/network_error")
+        spider.crawler.stats.inc_counter(
+            f"downloader/retry/network_error/{type(exception).__name__}"
         )
+        spider.crawler.stats.inc_counter(f"downloader/retry/attempt/{retry_count + 1}")
 
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Retrying %s (network error: %s, attempt %d/%d)",
+                request.url,
+                type(exception).__name__,
+                retry_count + 1,
+                self.max_retries,
+            )
         return MiddlewareResult.retry(self._make_retry_request(request, delay))
 
     async def process_response(
@@ -173,11 +175,9 @@ class RetryMiddleware(DownloaderMiddleware):
 
         retry_count = self._get_retry_count(request)
         if retry_count >= self.max_retries:
-            logger.debug(
-                "RetryMiddleware: max retries reached for %s (status=%s)",
-                request.url,
-                status,
-            )
+            spider.crawler.stats.inc_counter("downloader/retry/max_reached")
+            spider.crawler.stats.inc_counter("downloader/retry/http_error")
+            spider.crawler.stats.inc_counter(f"downloader/retry/http_status/{status}")
             return MiddlewareResult.keep(response)
 
         retry_after = None
@@ -188,16 +188,19 @@ class RetryMiddleware(DownloaderMiddleware):
                     retry_after = int(ra)
 
         delay = self._compute_delay(retry_count, retry_after)
+        spider.crawler.stats.inc_counter("downloader/retry/total")
+        spider.crawler.stats.inc_counter("downloader/retry/http_error")
+        spider.crawler.stats.inc_counter(f"downloader/retry/http_status/{status}")
+        spider.crawler.stats.inc_counter(f"downloader/retry/attempt/{retry_count + 1}")
 
-        logger.debug(
-            "RetryMiddleware: retrying %s (status=%s, delay=%.1fs, attempt=%d/%d)",
-            request.url,
-            status,
-            delay,
-            retry_count + 1,
-            self.max_retries,
-        )
-
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "Retrying %s (status %d, attempt %d/%d)",
+                request.url,
+                status,
+                retry_count + 1,
+                self.max_retries,
+            )
         return MiddlewareResult.retry(self._make_retry_request(request, delay))
 
     async def process_request(self, request: Request, spider: "Spider") -> MiddlewareResult:
@@ -206,3 +209,25 @@ class RetryMiddleware(DownloaderMiddleware):
         Kept for middleware contract completeness.
         """
         return MiddlewareResult.continue_()
+
+    async def open_spider(self, spider: "Spider") -> None:
+        """Lifecycle hook when spider is opened. Log configured retry parameters."""
+        try:
+            codes = None
+            if self.retry_http_codes is not None:
+                try:
+                    codes = sorted(self.retry_http_codes)
+                except Exception:
+                    codes = list(self.retry_http_codes)
+        except Exception:
+            codes = list(self.retry_http_codes)
+
+        logger.info(
+            "max_retries=%d, retry_http_codes=%r, priority_adjust=%d, backoff_base=%.3f, backoff_max=%.3f, backoff_jitter=%.3f",
+            self.max_retries,
+            codes,
+            self.priority_adjust,
+            self.backoff_base,
+            self.backoff_max,
+            self.backoff_jitter,
+        )

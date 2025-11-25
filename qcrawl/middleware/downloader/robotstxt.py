@@ -122,6 +122,8 @@ class RobotsTxtMiddleware(DownloaderMiddleware):
             allowed = True
 
         if not allowed:
+            spider.crawler.stats.inc_counter("robotstxt/blocked")
+
             # Emit request_dropped via spider-bound dispatcher when available
             try:
                 dispatcher = getattr(spider, "signals", None)
@@ -129,14 +131,22 @@ class RobotsTxtMiddleware(DownloaderMiddleware):
                     await dispatcher.send_async("request_dropped", request=request, exception=None)
             except Exception:
                 logger.exception("Error sending request_dropped signal for %s", request.url)
-            logger.debug("Blocked by robots.txt: %s", request.url)
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Blocked by robots.txt: %s", request.url)
+
             return MiddlewareResult.drop()
 
         return MiddlewareResult.continue_()
 
     async def open_spider(self, spider: "Spider") -> None:
-        # No-op hook; keep for lifecycle compat
-        return None
+        ua: str = self._resolve_user_agent(spider)
+        logger.info(
+            "obey=%s user_agent=%s cache_ttl=%s",
+            self.obey,
+            ua or "<default>",
+            self.cache_ttl,
+        )
 
     async def close_spider(self, spider: "Spider") -> None:
         # Clear caches to free memory

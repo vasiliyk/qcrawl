@@ -6,19 +6,6 @@ from enum import IntEnum
 
 import orjson
 
-from qcrawl.middleware.base import DownloaderMiddleware, SpiderMiddleware
-from qcrawl.middleware.downloader import (
-    CookiesMiddleware,
-    DownloadDelayMiddleware,
-    HttpCompressionMiddleware,
-    RedirectMiddleware,
-    RetryMiddleware,
-    RobotsTxtMiddleware,
-)
-from qcrawl.middleware.spider import (
-    DepthMiddleware,
-    OffsiteMiddleware,
-)
 from qcrawl.utils.settings import (
     ensure_int,
     ensure_str,
@@ -68,6 +55,9 @@ class Settings:
     # Pipeline settings
     PIPELINES: dict[str, int] | None = None
 
+    # Spider-level validation helpers
+    REQUIRED_FIELDS: list[str] | None = None
+
     # Downloader settings
     DOWNLOADER_SETTINGS: dict[str, int | bool | float] | None = field(
         default_factory=lambda: {
@@ -80,22 +70,23 @@ class Settings:
         }
     )
 
-    # Middleware with priority (higher = earlier)
-    DOWNLOADER_MIDDLEWARES: dict[type[DownloaderMiddleware], int] = field(
+    DOWNLOADER_MIDDLEWARES: dict[str, int] = field(
         default_factory=lambda: {
-            HttpCompressionMiddleware: 100,
-            RobotsTxtMiddleware: 200,
-            DownloadDelayMiddleware: 300,
-            RetryMiddleware: 400,
-            RedirectMiddleware: 500,
-            CookiesMiddleware: 600,
+            "qcrawl.middleware.downloader.RobotsTxtMiddleware": 200,
+            "qcrawl.middleware.downloader.HttpAuthMiddleware": 300,
+            "qcrawl.middleware.downloader.RetryMiddleware": 400,
+            "qcrawl.middleware.downloader.HttpCompressionMiddleware": 500,
+            "qcrawl.middleware.downloader.RedirectMiddleware": 600,
+            "qcrawl.middleware.downloader.DownloadDelayMiddleware": 700,
+            "qcrawl.middleware.downloader.ConcurrencyMiddleware": 800,
+            "qcrawl.middleware.downloader.CookiesMiddleware": 900,
         }
     )
 
-    SPIDER_MIDDLEWARES: dict[type[SpiderMiddleware], int] = field(
+    SPIDER_MIDDLEWARES: dict[str, int] = field(
         default_factory=lambda: {
-            DepthMiddleware: 100,
-            OffsiteMiddleware: 200,
+            "qcrawl.middleware.spider.OffsiteMiddleware": 100,
+            "qcrawl.middleware.spider.DepthMiddleware": 900,
         }
     )
 
@@ -196,6 +187,19 @@ class Settings:
 
             if mcph == 0:
                 logger.warning("max_connections_per_host=0 allows unlimited per host")
+
+        # Validate middleware settings are dotted-path -> int mappings
+        for name, mapping in (
+            ("DOWNLOADER_MIDDLEWARES", self.DOWNLOADER_MIDDLEWARES),
+            ("SPIDER_MIDDLEWARES", self.SPIDER_MIDDLEWARES),
+        ):
+            if not isinstance(mapping, dict):
+                raise TypeError(f"{name} must be a dict[str,int]")
+            for k, v in mapping.items():
+                if not isinstance(k, str):
+                    raise TypeError(f"{name} keys must be dotted path strings, got {type(k)!r}")
+                if not isinstance(v, int):
+                    raise TypeError(f"{name}[{k}] must be int")
 
     @classmethod
     def load(cls, config_file: str | None = None, **overrides) -> Settings:
