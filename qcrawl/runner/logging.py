@@ -32,7 +32,12 @@ def _normalize_level(level: str | int) -> int:
     return logging.INFO
 
 
-def setup_logging(level: str | int = "INFO", log_file: str | None = None) -> None:
+def setup_logging(
+    level: str | int = "INFO",
+    log_file: str | None = None,
+    log_format: str = "%(asctime)s %(levelname)s %(name)s: %(message)s",
+    log_dateformat: str | None = None,
+) -> None:
     """Configure logging for the CLI.
 
     - Ensures the root logger and the `qcrawl` namespace run at `level`.
@@ -48,8 +53,7 @@ def setup_logging(level: str | int = "INFO", log_file: str | None = None) -> Non
     else:
         handler = logging.StreamHandler(sys.stdout)
 
-    fmt = "%(asctime)s %(levelname)s %(name)s: %(message)s"
-    handler.setFormatter(logging.Formatter(fmt))
+    handler.setFormatter(logging.Formatter(log_format, datefmt=log_dateformat))
 
     # Try to use basicConfig with force=True (Python 3.8+). Fallback to manual replacement.
     try:

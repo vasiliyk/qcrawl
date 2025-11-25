@@ -28,7 +28,19 @@ def main() -> None:
     Exits with SystemExit on fatal errors.
     """
     args = parse_args()
-    setup_logging(args.log_level, args.log_file)
+
+    # Load runtime settings early to get logging configuration
+    runtime_settings = RuntimeSettings.load(
+        config_file=args.settings_file, log_level=args.log_level, log_file=args.log_file
+    )
+
+    # Setup logging with format from settings
+    setup_logging(
+        runtime_settings.LOG_LEVEL,
+        runtime_settings.LOG_FILE,
+        runtime_settings.LOG_FORMAT,
+        runtime_settings.LOG_DATEFORMAT,
+    )
     ensure_output_dir(args.export)
 
     settings = SpiderConfig()
@@ -39,10 +51,6 @@ def main() -> None:
             logging.error("Failed to load settings file %s: %s", args.settings_file, e)
             raise SystemExit(2) from e
     settings.merge_cli(args)
-
-    runtime_settings = RuntimeSettings.load(
-        config_file=args.settings_file, log_level=args.log_level, log_file=args.log_file
-    )
 
     try:
         spider_cls = load_spider_class(args.spider)

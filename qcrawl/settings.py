@@ -119,6 +119,8 @@ class Settings:
 
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str | None = None
+    LOG_FORMAT: str = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+    LOG_DATEFORMAT: str | None = None
 
     def __post_init__(self) -> None:
         """Validation only - no loading, no mutations."""
@@ -252,6 +254,8 @@ class Settings:
             "MAX_RETRIES": self.MAX_RETRIES,
             "LOG_LEVEL": self.LOG_LEVEL,
             "LOG_FILE": self.LOG_FILE,
+            "LOG_FORMAT": self.LOG_FORMAT,
+            "LOG_DATEFORMAT": self.LOG_DATEFORMAT,
         }
 
     def to_json(self) -> bytes:
