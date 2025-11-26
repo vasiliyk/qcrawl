@@ -64,7 +64,7 @@ When you run `qcrawl quotes_spider:QuotesSpider` qCrawl does the following:
 
 1. qCrawl locates the `QuotesSpider` class, instantiates it, and passes it to the crawling engine.
 2. The crawler schedules HTTP requests for the URLs in the spider's `start_urls` attribute.
-3. Upon receiving a successful response (HTTP 200), it is routed to the default callback method: `parse()`.
+3. Upon receiving a successful response (HTTP 200), it is routed to the `parse()` method.
 4. Inside the `parse()` method:
 
     A CSS selector `('div.quote')` is used to locate all quote containers on the page.
@@ -90,7 +90,7 @@ When you run `qcrawl quotes_spider:QuotesSpider` qCrawl does the following:
     If found:
 
     * A new request is scheduled to the next page URL using `yield self.follow(response, href)`.
-    * The same `parse()` method is reused as the callback until no “Next” link is present.
+    * The same `parse()` method handles all responses until no "Next" link is present.
 
 
 6. An item processed according to the [CLI options](../concepts/cli.md):

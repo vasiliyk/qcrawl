@@ -24,15 +24,24 @@ nav:
       - Middlewares: concepts/middlewares.md
       - Requests and Responses: concepts/requests_responses.md
       - Settings: concepts/settings.md
+  - Advanced Topics:
+      - Authentication: advanced_topics/authentication.md
+      - Crawling ordering: advanced_topics/crawl_ordering.md
+      - Data extraction: advanced_topics/data_extraction.md
+      - Error recovery: advanced_topics/error_recovery.md
+      - Link filtering: advanced_topics/link_filtering.md
+      - Pagination: advanced_topics/pagination.md
+      - Rate limiting: advanced_topics/rate_limiting.md
+#    - Deduplication: advanced/deduplication.md
+#    - Performance Optimization: advanced/performance_optimization.md
   - Built-in Components:
       - Logging: built-in/logging.md
       - Stat Collection: built-in/stats.md
   - Extending qCrawl:
     - Architecture overview: extending/architecture_overview.md
-#    - Middleware: extending/middleware.md
+    - Middleware: extending/middleware.md
     - Signals: extending/signals.md
-#    - Scheduler: extending/downloader_middleware.md
-#    - Item Exporters: extending/downloader_middleware.md
+    - Scheduler: extending/scheduler.md
 
 # Repository
 repo_url: https://github.com/crawlcore/qcrawl
