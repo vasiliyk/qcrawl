@@ -35,9 +35,6 @@ flowchart TB
   SPIDER -.->|yield Item / Request / URL| SCHED
   SPIDER -.->|yield Item / Request / URL| PIPELINE
   PIPELINE -->|persisted results| STORAGE
-
-  %% Styles
-  classDef Storage fill:#333,color:#fff,stroke:#777,stroke-width:2px
 ```
 <br>
 
@@ -129,5 +126,5 @@ Step-by-step (what each arrow means):
 - scheduler semantics & dedupe: `qcrawl/core/scheduler.py`
 - downloads, slots, signals emission: `qcrawl/core/downloader.py`
 - middleware contracts and manager: `qcrawl/middleware/base.py`, `qcrawl/middleware/manager.py`
-- pipelines: `qcrawl/pipeline/manager.py`, `qcrawl/pipeline/base.py`
+- pipelines: `qcrawl/pipelines/manager.py`, `qcrawl/pipelines/base.py`
 - signals implementation: `qcrawl/signals.py`
