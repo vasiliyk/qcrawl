@@ -1,6 +1,6 @@
 [project]
 name = "qcrawl"
-version = "0.3.1"
+version = "0.3.2"
 description = "Fast async web crawler & scraping framework, supporting deduplication, and extensible middleware."
 authors = [{ name = "Vasiliy Kiryanov", email = "vasiliy.kiryanov@gmail.com" }]
 maintainers = [{name = "Vasiliy Kiryanov", email = "vasiliy.kiryanov@gmail.com"}]
