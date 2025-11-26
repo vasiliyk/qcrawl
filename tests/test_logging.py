@@ -296,7 +296,14 @@ LOG_DATEFORMAT = "%Y-%m-%d"
             pass
 
         monkeypatch.setattr(cli, "run_async", fake_run)
-        monkeypatch.setattr(cli.asyncio, "run", lambda coro: None)
+
+        # Mock asyncio.run to properly handle the coroutine
+        def mock_asyncio_run(coro):
+            # Close the coroutine to avoid the warning
+            coro.close()
+            return None
+
+        monkeypatch.setattr(cli.asyncio, "run", mock_asyncio_run)
 
         # Run main
         cli.main()

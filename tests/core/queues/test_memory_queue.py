@@ -1,3 +1,5 @@
+"""Tests for qcrawl.core.queues.memory.MemoryPriorityQueue"""
+
 import asyncio
 
 import pytest
@@ -86,3 +88,30 @@ async def test_get_raises_runtimeerror_on_decode_failure() -> None:
 
     with pytest.raises(RuntimeError, match="Failed to decode in-memory request payload"):
         await q.get()
+
+
+@pytest.mark.asyncio
+async def test_async_iteration_protocol() -> None:
+    """Test RequestQueue async iteration protocol (__aiter__, __anext__)."""
+    q = MemoryPriorityQueue()
+
+    await q.put(Request(url="http://first.example"), priority=0)
+    await q.put(Request(url="http://second.example"), priority=0)
+    await q.close()
+
+    urls = []
+    async for req in q:
+        urls.append(req.url)
+
+    assert len(urls) == 2
+    assert "first.example" in urls[0]
+    assert "second.example" in urls[1]
+
+
+def test_repr() -> None:
+    """Test RequestQueue.__repr__ shows class name and maxsize."""
+    q = MemoryPriorityQueue(maxsize=50)
+    repr_str = repr(q)
+
+    assert "MemoryPriorityQueue" in repr_str
+    assert "maxsize=50" in repr_str
