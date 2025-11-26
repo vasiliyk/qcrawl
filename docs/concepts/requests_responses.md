@@ -9,8 +9,8 @@ immutable `body` (bytes), and a `meta` dict for crawler, spider, middleware, and
 
 ### Serialization
 
-- `Request.to_bytes()` serializing to a compact binary format using [Msgspec](https://jcristharif.com/msgspec/).
-- `Request.from_bytes()` or `Request.from_dict()` deserializing; both methods validate types and raise `TypeError` for malformed input.
+- `Request.to_bytes()` serializes to a compact binary format using [Msgspec](https://jcristharif.com/msgspec/).
+- `Request.from_bytes()` or `Request.from_dict()` deserialize from bytes/dict; both methods validate types and raise `TypeError` for malformed input.
 
 
 ### Creating and yielding requests
@@ -39,14 +39,14 @@ async def parse(self, response: Page):
     status = response.status_code
     content = response.content  # bytes
     headers = response.headers
-    request = response.request # the original Request object
+    request = response.request  # the original Request object
     # Process the response content...
 ```
 
 ## Page (response)
 
 `Page` is the response object produced by the `Downloader` and passed to `Spider.parse()`.
-It provides convenient access to `content`, `status_code`, `headers`, `url`, `text`, and the originating `request`.
+It provides attributes (`content`, `status_code`, `headers`, `url`, `request`) and methods (`text()`, `json()`).
 
 
 ### Creating Page objects (manually)
