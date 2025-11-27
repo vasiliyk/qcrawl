@@ -80,9 +80,11 @@ def test_main_invokes_runner(monkeypatch, tmp_path):
 
 def test_load_spider_class_adds_cwd_to_syspath(tmp_path, monkeypatch):
     """Test that load_spider_class automatically adds CWD to sys.path"""
+    import uuid
 
-    # Create a spider module in a temp directory
-    spider_file = tmp_path / "test_spider.py"
+    # Create a spider module with unique name to avoid caching issues
+    unique_name = f"test_spider_{uuid.uuid4().hex[:8]}"
+    spider_file = tmp_path / f"{unique_name}.py"
     spider_file.write_text(
         """
 from qcrawl.core.spider import Spider
@@ -100,12 +102,13 @@ class TestSpider(Spider):
     # Change to the temp directory
     monkeypatch.chdir(tmp_path)
 
-    # Save original sys.path
+    # Save original sys.path and sys.modules
     original_path = sys.path.copy()
+    original_modules = sys.modules.copy()
 
     try:
         # Load spider class with module path
-        spider_cls = cli.load_spider_class("test_spider:TestSpider")
+        spider_cls = cli.load_spider_class(f"{unique_name}:TestSpider")
 
         # Verify CWD was added to sys.path
         assert str(tmp_path) in sys.path
@@ -114,8 +117,12 @@ class TestSpider(Spider):
         assert spider_cls.__name__ == "TestSpider"
         assert spider_cls.name == "test"
     finally:
-        # Restore sys.path
+        # Restore sys.path and clean up imported module
         sys.path[:] = original_path
+        # Remove the dynamically imported module
+        for key in list(sys.modules.keys()):
+            if key not in original_modules:
+                del sys.modules[key]
 
 
 def test_load_spider_class_with_dotted_module_path(monkeypatch):
