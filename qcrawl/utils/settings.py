@@ -146,16 +146,26 @@ def mask_secrets(
 
 
 def load_config_file(path: str) -> dict[str, object]:
-    """Load config file. Supports TOML (recommended) and JSON fallback. Returns a dict."""
+    """Load config file from TOML format only.
+
+    Args:
+        path: Path to the TOML config file (must have .toml extension).
+
+    Returns:
+        Dictionary of configuration values.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the file does not have a .toml extension.
+        TypeError: If the file content is not a dict.
+    """
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
+    if p.suffix.lower() != ".toml":
+        raise ValueError("Config file must be a TOML file with a .toml extension")
     text = p.read_text(encoding="utf-8")
-    if p.suffix.lower() == ".toml":
-        data = tomllib.loads(text) or {}
-    else:
-        # JSON fallback
-        data = orjson.loads(text or "{}") or {}
+    data = tomllib.loads(text) or {}
     if not isinstance(data, dict):
         raise TypeError("Config file must yield a dict")
     return data
