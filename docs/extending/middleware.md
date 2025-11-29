@@ -6,11 +6,13 @@ Middlewares are hooks that sit between core components, allowing you to modify r
 qCrawl has two types of middlewares:
 
 **DownloaderMiddleware** - Hooks around HTTP download:
+
 - Modify requests before they're sent (add headers, authentication)
 - Process responses after download (filter, retry, redirect)
 - Handle exceptions during download (network errors, timeouts)
 
 **SpiderMiddleware** - Hooks around spider processing:
+
 - Filter initial requests from `start_requests()`
 - Process responses before `spider.parse()`
 - Filter Items and Requests yielded by spider
@@ -29,6 +31,7 @@ Downloader middlewares wrap the HTTP download process.
 Called **before** the request is sent to the downloader.
 
 **Use cases**:
+
 - Add authentication headers
 - Set cookies
 - Add custom headers
@@ -36,6 +39,7 @@ Called **before** the request is sent to the downloader.
 - Log outgoing requests
 
 **Returns**: `MiddlewareResult` enum
+
 - `CONTINUE` - Pass request to next middleware
 - `KEEP` - Stop chain, send this request to downloader
 - `DROP` - Drop request entirely (don't download)
@@ -55,6 +59,7 @@ class AuthMiddleware(DownloaderMiddleware):
 Called **after** the downloader returns a response.
 
 **Use cases**:
+
 - Filter responses by status code
 - Detect and handle errors
 - Transform response content
@@ -62,6 +67,7 @@ Called **after** the downloader returns a response.
 - Trigger retries
 
 **Returns**: `MiddlewareResult` enum
+
 - `CONTINUE` - Pass response to next middleware
 - `KEEP` - Stop chain, send this response to spider
 - `RETRY` - Retry the request
@@ -83,12 +89,14 @@ class StatusCodeMiddleware(DownloaderMiddleware):
 Called when an exception occurs during download.
 
 **Use cases**:
+
 - Handle network errors
 - Log exceptions
 - Retry failed requests
 - Return fallback responses
 
 **Returns**: `MiddlewareResult` enum
+
 - `CONTINUE` - Pass to next middleware
 - `RETRY` - Retry the request
 - `DROP` - Drop request
@@ -134,12 +142,14 @@ Spider middlewares wrap spider processing.
 Called with initial requests from `spider.start_requests()`.
 
 **Use cases**:
+
 - Filter initial URLs
 - Add metadata to start requests
 - Transform URLs
 - Limit initial requests
 
 **Parameters**:
+
 - `start_requests` - Async generator of initial Requests
 
 **Returns**: Async generator of Requests
@@ -160,12 +170,14 @@ class StartRequestsFilterMiddleware(SpiderMiddleware):
 Called **before** `spider.parse()` receives the response.
 
 **Use cases**:
+
 - Validate response before parsing
 - Add metadata to response
 - Filter responses
 - Log incoming responses
 
 **Returns**: `MiddlewareResult` enum
+
 - `CONTINUE` - Pass response to next middleware
 - `DROP` - Drop response (don't parse)
 
@@ -185,6 +197,7 @@ class ResponseValidationMiddleware(SpiderMiddleware):
 Called with each Item or Request yielded by `spider.parse()`.
 
 **Use cases**:
+
 - Filter Items or Requests
 - Transform yielded data
 - Add metadata to Items
@@ -192,10 +205,12 @@ Called with each Item or Request yielded by `spider.parse()`.
 - Log scraped items
 
 **Parameters**:
+
 - `response` - The response being parsed
 - `result` - Individual Item or Request yielded by spider
 
 **Returns**: `Item | Request | None`
+
 - Return the result to pass it along
 - Return `None` to drop it
 
@@ -218,6 +233,7 @@ class ItemFilterMiddleware(SpiderMiddleware):
 Called when spider.parse() raises an exception.
 
 **Use cases**:
+
 - Log parsing errors
 - Handle specific exceptions
 - Return fallback Items/Requests
@@ -275,6 +291,7 @@ class MyMiddleware(DownloaderMiddleware):
 ```
 
 **When to use each**:
+
 - `CONTINUE` - Default, pass to next middleware
 - `KEEP` - Stop chain early (optimization)
 - `RETRY` - Request failed, retry with backoff
@@ -391,37 +408,45 @@ class RateLimitMiddleware(DownloaderMiddleware):
 ### Downloader middlewares
 
 **RetryMiddleware** (priority 500):
+
 - Retries failed requests with exponential backoff
 - Handles network errors and HTTP error codes
 - Settings: `RETRY_ENABLED`, `RETRY_TIMES`, `RETRY_HTTP_CODES`
 
 **RedirectMiddleware** (priority 600):
+
 - Follows HTTP redirects (301, 302, 303, 307, 308)
 - Settings: `REDIRECT_ENABLED`, `REDIRECT_MAX_TIMES`
 
 **CookieMiddleware** (priority 700):
+
 - Manages cookies across requests
 - Settings: `COOKIES_ENABLED`
 
 **UserAgentMiddleware** (priority 400):
+
 - Sets User-Agent header
 - Settings: `USER_AGENT`
 
 **DownloadDelayMiddleware** (priority 100):
+
 - Enforces delays between requests to same domain
 - Settings: `DELAY_PER_DOMAIN`, `RANDOMIZE_DELAY`
 
 **ConcurrencyMiddleware** (priority 200):
+
 - Limits concurrent requests per domain
 - Settings: `CONCURRENCY_PER_DOMAIN`
 
 ### Spider middlewares
 
 **DepthMiddleware** (priority 100):
+
 - Enforces maximum crawl depth
 - Settings: `DEPTH_LIMIT`, `DEPTH_STATS_VERBOSE`
 
 **HttpErrorMiddleware** (priority 50):
+
 - Filters responses by status code
 - Settings: `HTTPERROR_ALLOWED_CODES`
 
