@@ -1,14 +1,14 @@
 
-
 !!! quote
 
-    “You don’t learn to walk by following rules. You learn by doing, and by falling over.”
+    "You don't learn to walk by following rules. You learn by doing, and by falling over."
     — Richard Branson
 
-My idea is to create a dedicated repository with various example spiders covering different use-cases.<br>
-While I work on that, here are some general examples to get you started.
+This page provides practical examples demonstrating different qCrawl features and common use cases.
 
-## CSS selectors + custom settings + middleware configuration
+## CSS selectors with custom settings
+
+This example demonstrates CSS selectors, custom spider settings, and error handling patterns.
 
 ```python title="quotes_css_spider.py"
 import logging
@@ -46,11 +46,11 @@ class Quotes(Spider):
     async def parse(self, response):
         rv = self.response_view(response)
 
-        # Safe cssselect usage: catch SelectorError (unsupported/invalid selectors)
+        # Safely handle CSS selector errors (malformed or unsupported selectors)
         try:
             quotes = rv.doc.cssselect("div.quote")
         except SelectorError:
-            # Skip page gracefully (engine will not treat as an error)
+            # Skip page gracefully without raising an error
             return
 
         for q in quotes:
@@ -59,7 +59,7 @@ class Quotes(Spider):
                 author = q.cssselect("small.author")[0].text_content().strip()
                 tags = [t.text_content().strip() for t in q.cssselect("div.tags a.tag")]
             except (IndexError, SelectorError):
-                # Missing node or inner selector problem — skip this item
+                # Skip items with missing elements or selector issues
                 continue
 
             yield Item(
@@ -67,7 +67,7 @@ class Quotes(Spider):
                 metadata={"source": "quotes.toscrape.com"},
             )
 
-        # Follow pagination (use rv.follow to resolve correctly)
+        # Follow pagination links (rv.follow resolves relative URLs automatically)
         next_a = rv.doc.cssselect("li.next a")
         if next_a:
             href = next_a[0].get("href")
@@ -78,6 +78,8 @@ class Quotes(Spider):
 For settings setup including `custom_settings`, see [Settings documentation](../concepts/settings.md).
 
 ## XPath selectors
+
+This example shows how to use XPath selectors for more powerful element selection and text extraction.
 
 ```python title="quotes_xpath_spider.py"
 import logging
@@ -133,8 +135,12 @@ class QuotesXPath(Spider):
 - **XPath**: `//div[@class='quote']` - More powerful, can navigate parent/sibling nodes
 - **CSS**: `div.quote` - Simpler syntax, better browser DevTools support
 
+See [Selectors documentation](../concepts/selectors.md) for more details.
 
-## API / JSON scraping
+
+## API and JSON scraping
+
+This example demonstrates scraping JSON APIs, handling content-type validation, and parsing Link headers for pagination.
 
 ```python title="api_spider.py"
 import logging
@@ -208,96 +214,29 @@ class JSONApiSpider(Spider):
 - Handle pagination via Link headers or query parameters
 - Set appropriate `Accept` header in `DEFAULT_REQUEST_HEADERS`
 
-## Using request meta (passing data between requests)
+## Running spiders programmatically (without CLI)
 
-```python title="meta_spider.py"
-import logging
+Use `SpiderRunner` to run any spider programmatically from Python code:
 
-from qcrawl.core.item import Item
-from qcrawl.core.spider import Spider
+```python
+import asyncio
+from qcrawl.runner.run import SpiderRunner
 
-logger = logging.getLogger(__name__)
+async def main():
+    runner = SpiderRunner(
+        settings={
+            "CONCURRENCY": 4,
+            "LOG_LEVEL": "INFO",
+        }
+    )
 
+    # Run any spider (e.g., QuotesSpider from examples above)
+    await runner.crawl(QuotesSpider)
 
-class EcommerceSpider(Spider):
-    name = "ecommerce_meta"
-    start_urls = ["https://books.toscrape.com/"]
-
-    async def parse(self, response):
-        """Single parse method handles all page types using meta for routing."""
-        rv = self.response_view(response)
-
-        # Use meta to determine what type of page this is
-        page_type = response.request.meta.get("page_type", "home")
-
-        if page_type == "home":
-            # Parse home page - extract category links
-            categories = rv.doc.cssselect("div.side_categories ul.nav-list li ul li a")
-
-            for cat_link in categories:
-                category_name = cat_link.text_content().strip()
-                href = cat_link.get("href")
-
-                if href:
-                    # Mark as category page and pass category name
-                    yield rv.follow(
-                        href,
-                        meta={"page_type": "category", "category": category_name, "page": 1},
-                    )
-
-        elif page_type == "category":
-            # Parse category page - extract product links
-            category = response.request.meta.get("category", "Unknown")
-            page = response.request.meta.get("page", 1)
-
-            logger.info(f"Parsing {category} - Page {page}")
-
-            products = rv.doc.cssselect("article.product_pod h3 a")
-
-            for product in products:
-                href = product.get("href")
-                if href:
-                    # Mark as product page and pass category info
-                    yield rv.follow(
-                        href,
-                        meta={"page_type": "product", "category": category, "page": page},
-                    )
-
-            # Follow pagination (preserve meta)
-            next_page = rv.doc.cssselect("li.next a")
-            if next_page:
-                href = next_page[0].get("href")
-                if href:
-                    yield rv.follow(
-                        href,
-                        meta={"page_type": "category", "category": category, "page": page + 1},
-                    )
-
-        elif page_type == "product":
-            # Parse product page - extract product details
-            category = response.request.meta.get("category", "Unknown")
-            page = response.request.meta.get("page", 0)
-
-            title_elem = rv.doc.cssselect("h1")
-            price_elem = rv.doc.cssselect("p.price_color")
-
-            if title_elem and price_elem:
-                yield Item(
-                    data={
-                        "title": title_elem[0].text_content().strip(),
-                        "price": price_elem[0].text_content().strip(),
-                        "url": response.url,
-                        "category": category,
-                        "found_on_page": page,
-                    },
-                    metadata={"source": "books.toscrape.com"},
-                )
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-**Request meta patterns:**
+This is useful for embedding qCrawl in applications, scripts, or automated workflows.
 
-- **Page routing**: Use `page_type` in meta to route different page types in single `parse()` method
-- **Pass context**: Use `meta` to pass category, search query, or other context
-- **Track depth**: Pass pagination info (`page`, `offset`) through requests
-- **Preserve data**: Meta persists through the entire request chain
-- **Type safety**: Always use `.get()` with defaults when accessing meta
+See "Advanced Topics" section for more complex patterns like collecting items programmatically, running multiple spiders, or using pipelines and signals.

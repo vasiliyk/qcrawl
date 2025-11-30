@@ -25,13 +25,13 @@ nav:
       - Requests and Responses: concepts/requests_responses.md
       - Settings: concepts/settings.md
   - Advanced Topics:
-      - Authentication: advanced_topics/authentication.md
-      - Crawling ordering: advanced_topics/crawl_ordering.md
-      - Data extraction: advanced_topics/data_extraction.md
-      - Error recovery: advanced_topics/error_recovery.md
-      - Link filtering: advanced_topics/link_filtering.md
-      - Pagination: advanced_topics/pagination.md
-      - Rate limiting: advanced_topics/rate_limiting.md
+      - Authentication: advanced-topics/authentication.md
+      - Crawling ordering: advanced-topics/crawl_ordering.md
+      - Data extraction: advanced-topics/data_extraction.md
+      - Error recovery: advanced-topics/error_recovery.md
+      - Link filtering: advanced-topics/link_filtering.md
+      - Pagination: advanced-topics/pagination.md
+      - Rate limiting: advanced-topics/rate_limiting.md
 #    - Deduplication: advanced/deduplication.md
 #    - Performance Optimization: advanced/performance_optimization.md
   - Built-in Components:

@@ -345,7 +345,7 @@ maxsize = 0  # Unlimited (monitor Redis memory externally)
 - **Graceful shutdown**: Always call `close()` and `join()` for clean shutdown
 - **Avoid blocking operations**: Scheduler methods are async; don't block the event loop
 
-For practical crawling patterns using scheduler features (breadth-first, depth-first, focused crawling), see [Crawl Ordering](../advanced_topics/crawl_ordering.md).
+For practical crawling patterns using scheduler features (breadth-first, depth-first, focused crawling), see [Crawl Ordering](../advanced-topics/crawl_ordering.md).
 
 
 ## Troubleshooting

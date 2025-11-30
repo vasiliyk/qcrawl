@@ -376,4 +376,4 @@ class MySpider(Spider):
 - **Test pipelines**: Unit test pipeline logic independently from spiders
 - **Reuse pipelines**: Share common pipelines across multiple spiders
 
-See also: [Items](items.md), [Data Extraction](../advanced_topics/data_extraction.md), [Exporters](exporters.md)
+See also: [Items](items.md), [Data Extraction](../advanced-topics/data_extraction.md), [Exporters](exporters.md)

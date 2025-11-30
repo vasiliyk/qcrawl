@@ -46,7 +46,7 @@ For the full list of settings, refer to the [Settings documentation](settings.md
 
 | Option                 | Type                     | Default    | Description                                                                            |
 |------------------------|--------------------------|------------|----------------------------------------------------------------------------------------|
-| `--export <path>`      | `str`                    | `None`     | Export destination (local path or `-` / `stdout` for stdout)                           |
+| `--export <path>`      | `str`                    | `stdout`   | Export destination (local path or `-` / `stdout` for stdout). Defaults to stdout if not specified. |
 | `--export-format`      | `ndjson, json, csv, xml` | `ndjson`   | Export format.                                                                         |
 | `--export-mode`        | `buffered, stream`       | `buffered` | Export mode for JSON/NDJSON (buffered writes all at once, stream writes item-by-item). |
 | `--export-buffer-size` | `int`                    | `500`      | Buffer size (only used when `--export-format=json` and `--export-mode=buffered`).      |
