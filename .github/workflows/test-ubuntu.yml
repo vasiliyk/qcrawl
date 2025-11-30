@@ -35,4 +35,4 @@ jobs:
       - name: Run tests
         run: |
           pip install -U tox
-          tox -e tests
+          tox -e tests-unit

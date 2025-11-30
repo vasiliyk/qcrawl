@@ -35,7 +35,11 @@ skip_install = false
 commands = [["pytest", "-q", "--maxfail=1"]]
 
 [env.tests]
-description = "Run tests"
+description = "Run all tests (unit + integration)"
+
+[env.tests-unit]
+description = "Run unit tests only (skip integration tests requiring Docker)"
+commands = [["pytest", "-q", "--maxfail=1", "-m", "not integration"]]
 
 [env.lint]
 description = "Run linters / formatter (ruff)"
