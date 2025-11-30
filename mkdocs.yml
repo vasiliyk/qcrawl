@@ -10,7 +10,7 @@ site_description: Fast asynchronous web crawler framework, supporting distribute
 nav:
   - Home: index.md
   - Getting Started:
-    - 5 mins overview: getting-started/overview.md
+    - 10 mins overview: getting-started/overview.md
     - Installation: getting-started/installation.md
     - Examples: getting-started/examples.md
 #    - Tutorial: getting-started/tutorial.md
