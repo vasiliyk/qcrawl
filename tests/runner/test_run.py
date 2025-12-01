@@ -54,12 +54,13 @@ def test_spider_runner_init_custom_log_file(tmp_path):
     assert runner.log_file == log_file
 
 
-def test_spider_runner_filters_runner_only_keys():
+def test_spider_runner_filters_runner_only_keys(tmp_path):
     """SpiderRunner filters out runner-only keys from runtime settings."""
+    log_file = str(tmp_path / "test.log")
     runner = SpiderRunner(
         settings={
             "log_level": "DEBUG",
-            "log_file": "/tmp/test.log",
+            "log_file": log_file,
             "export": "output.json",
             "export_format": "json",
             "export_mode": "buffered",
@@ -71,7 +72,7 @@ def test_spider_runner_filters_runner_only_keys():
 
     # Runner settings should be available
     assert runner.log_level == "DEBUG"
-    assert runner.log_file == "/tmp/test.log"
+    assert runner.log_file == log_file
 
     # Runtime settings should NOT contain runner-only keys
     # but SHOULD contain crawler settings like CONCURRENCY
