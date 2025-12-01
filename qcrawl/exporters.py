@@ -148,10 +148,8 @@ class XmlExporter:
 
     def close(self) -> bytes:
         """Finalize export and return any remaining serialized data."""
-        if not self.items:
-            return b'<?xml version="1.0" encoding="UTF-8"?>\n<items/>\n'
-
         root = ET.Element("items")
+
         for data in self.items:
             item_elem = ET.SubElement(root, "item")
             for k, v in data.items():
