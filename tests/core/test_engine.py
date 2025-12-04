@@ -4,9 +4,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from qcrawl.core.downloader import Downloader
 from qcrawl.core.engine import CrawlEngine
 from qcrawl.core.scheduler import Scheduler
+from qcrawl.downloaders import DownloadHandlerManager
 
 
 @pytest.fixture
@@ -16,24 +16,24 @@ def mock_scheduler():
 
 
 @pytest.fixture
-def mock_downloader():
-    """Provide a mock downloader."""
-    return Mock(spec=Downloader)
+def mock_handler_manager():
+    """Provide a mock download handler manager."""
+    return Mock(spec=DownloadHandlerManager)
 
 
 @pytest.fixture
-def engine(mock_scheduler, mock_downloader, spider):
+def engine(mock_scheduler, mock_handler_manager, spider):
     """Provide a CrawlEngine instance with mocked dependencies."""
-    return CrawlEngine(mock_scheduler, mock_downloader, spider)
+    return CrawlEngine(mock_scheduler, mock_handler_manager, spider)
 
 
 # Initialization Tests
 
 
-def test_engine_initializes_correctly(engine, mock_scheduler, mock_downloader, spider):
+def test_engine_initializes_correctly(engine, mock_scheduler, mock_handler_manager, spider):
     """Engine initializes with all required components."""
     assert engine.scheduler is mock_scheduler
-    assert engine.downloader is mock_downloader
+    assert engine.handler_manager is mock_handler_manager
     assert engine.spider is spider
     assert engine.signals is not None
     assert engine._running is False

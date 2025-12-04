@@ -406,8 +406,8 @@ async def test_process_spider_output_raises_on_invalid_return_type():
     """process_spider_output raises TypeError when middleware returns wrong type."""
 
     class BadMiddleware(SpiderMiddleware):
-        async def process_spider_output(self, response, result, spider):
-            return ["not", "async", "iterable"]  # Should return async generator
+        def process_spider_output(self, response, result, spider):
+            return ["not", "async", "iterable"]  # Should return async generator or None
 
     async def spider_output():
         yield Item(data={"test": "value"})

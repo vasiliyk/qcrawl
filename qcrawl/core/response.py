@@ -26,6 +26,7 @@ class Page:
         "status_code",
         "headers",
         "request",
+        "meta",
         "_detected_encoding",
     )
 
@@ -44,6 +45,7 @@ class Page:
         self.status_code = status_code
         self.headers = headers
         self.request = request
+        self.meta: dict[str, object] = {}
 
     def _detect_encoding(self) -> str:
         if self._detected_encoding is not None:

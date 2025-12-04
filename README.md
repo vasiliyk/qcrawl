@@ -5,19 +5,18 @@
 [![Codecov](https://img.shields.io/codecov/c/github/crawlcore/qcrawl/main?style=for-the-badge)](https://codecov.io/gh/crawlcore/qcrawl)
 
 [qcrawl](https://www.qcrawl.org) is a fast async web crawling & scraping framework for Python to extract structured data from web-pages.
-It is cross-platform and easy to install via `pip`, `conda`, or OS packages.
+It is cross-platform and easy to install via `pip` or `conda`.
 
 Follow the [documentation](https://www.qcrawl.org/).
 
 
-### Libraries comparison
+### qCrawl features
 
-| Attribute           | qCrawl ⭐                                                          | Scrapy                                                           | Playwright                                                             | Colly                                     |
-|---------------------|-------------------------------------------------------------------|------------------------------------------------------------------|------------------------------------------------------------------------|-------------------------------------------|
-| Language            | Python                                                            | Python                                                           | Node.js, Python, Java                                                  | Go                                        |
-| Concurrency model   | Asyncio native with threads for I/O work                          | Evented (Twisted) with non‑blocking I/O                          | Isolated contexts within browser instance + multiple browser instances | Goroutines (lightweight threads)          |
-| Queue               | Priority queue with FIFO tiebreak, memory, [disk,] redis backends | Priority queue with FIFO/LIFO tiebreak, memory and disk backends | No built-in crawl queue (user-managed)                                 | FIFO with memory and file backends        |
-| Middleware & hooks  | Downloader + Spider middlewares; signal-driven lifecycle hooks    | Downloader + Spider middlewares; signal-driven lifecycle hooks   | Hooks and interception API; not pipeline-centric                       | Middleware-style callbacks                |
-| Crawl throttling    | Per-domain concurrency with configurable delay                    | Per-domain concurrency with configurable delay                   | Controlled via browser sessions                                        | Per-host concurrency                      |
-| Strengths           | Lightweight, high-throughput, easy to extend                      | Very mature ecosystem and community, easy to extend              | Real browser rendering, JS support, robust for SPA sites               | Extremely high throughput, low memory use |
-
+1. Async architecture - High-performance concurrent crawling based on asyncio
+2. Performance optimized - Queue backend on Redis with direct delivery, messagepack serialization, connection pooling, DNS caching
+3. Powerful parsing - CSS/XPath selectors with lxml
+4. Middleware system - Customizable request/response processing
+5. Flexible export - Multiple output formats including JSON, CSV, XML
+6. Flexible queue backends - Memory or Redis-based (+disk) schedulers for different scale requirements
+7. Item pipelines - Data transformation, validation, and processing pipeline
+8. Pluggable downloaders - HTTP (aiohttp), Camoufox (stealth browser) for JavaScript rendering and anti-bot evasion

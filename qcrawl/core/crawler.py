@@ -3,18 +3,17 @@ from __future__ import annotations
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import asdict
 from typing import TYPE_CHECKING
 
-import aiohttp
-
 from qcrawl import signals
-from qcrawl.core.downloader import Downloader
 from qcrawl.core.engine import CrawlEngine
 from qcrawl.core.queue import RequestQueue
 from qcrawl.core.queues.memory import MemoryPriorityQueue
 from qcrawl.core.scheduler import Scheduler
 from qcrawl.core.spider import Spider
 from qcrawl.core.stats import StatsCollector
+from qcrawl.downloaders import DownloadHandlerManager
 from qcrawl.middleware import DownloaderMiddleware
 from qcrawl.middleware.base import SpiderMiddleware
 from qcrawl.utils.fingerprint import RequestFingerprinter
@@ -31,7 +30,7 @@ class Crawler:
 
     Responsibilities
         - Accepts a `Spider` instance and an immutable `RuntimeSettings` snapshot.
-        - Creates and wires Downloader, Scheduler, and CrawlEngine when `crawl()` is run.
+        - Creates and wires DownloadHandlerManager, Scheduler, and CrawlEngine when `crawl()` is run.
         - Accepts middleware registrations (instances, classes, or factories) before crawl.
         - Registers defensive global stats handlers so StatsCollector receives runtime signals.
         - Ensures deterministic cleanup: disconnects only handlers it actually connected,
@@ -42,7 +41,7 @@ class Crawler:
         self.spider = spider
         self.runtime_settings = runtime_settings
         self.queue: RequestQueue | None = None
-        self.downloader: Downloader | None = None
+        self.handler_manager: DownloadHandlerManager | None = None
         self.scheduler: Scheduler | None = None
         self.engine: CrawlEngine | None = None
         self._pending_middlewares: list[object] = []
@@ -226,9 +225,9 @@ class Crawler:
         except Exception:
             logger.exception("Error while cleaning up CLI signal handlers")
 
-        if self.downloader:
-            await self.downloader.close()
-            self.downloader = None
+        if self.handler_manager:
+            await self.handler_manager.close()
+            self.handler_manager = None
         if self.scheduler:
             await self.scheduler.close()
             self.scheduler = None
@@ -404,7 +403,7 @@ class Crawler:
         Workflow:
           1. Apply per-spider Settings snapshot (Settings.with_overrides) FIRST.
           2. Build RequestFingerprinter using runtime settings.
-          3. Create Downloader, Scheduler, and CrawlEngine.
+          3. Create DownloadHandlerManager, Scheduler, and CrawlEngine.
           4. Resolve and install pending downloader and spider middlewares.
           5. Register stats handlers so StatsCollector receives signals.
           6. Call middleware.open_spider(), spider.open_spider(), emit spider_opened, then run engine.crawl().
@@ -423,10 +422,10 @@ class Crawler:
             # Create core components using finalized settings
             fingerprinter = RequestFingerprinter()
 
-            self.downloader = await Downloader.create(
-                signal_dispatcher=signals.signals_registry,
-                timeout=aiohttp.ClientTimeout(total=getattr(final_settings, "TIMEOUT", 180.0)),
-                settings=getattr(final_settings, "DOWNLOADER_SETTINGS", None),
+            # Create download handler manager
+            self.handler_manager = DownloadHandlerManager(
+                handler_configs=getattr(final_settings, "DOWNLOAD_HANDLERS", {}),
+                settings=final_settings,
             )
 
             self.scheduler = Scheduler(
@@ -436,7 +435,7 @@ class Crawler:
 
             self.engine = CrawlEngine(
                 scheduler=self.scheduler,
-                downloader=self.downloader,
+                handler_manager=self.handler_manager,
                 spider=self.spider,
             )
             self.engine.crawler = self
@@ -493,10 +492,8 @@ class Crawler:
             # Get available runtime setting keys (uppercase)
             runtime_keys: set[str] = set()
             try:
-                if hasattr(base_settings, "to_dict"):
-                    runtime_keys = {k.upper() for k in base_settings.to_dict()}
-                elif isinstance(base_settings, dict):
-                    runtime_keys = {k.upper() for k in base_settings}
+                # Use asdict() to get all settings fields, not just the subset from to_dict()
+                runtime_keys = {k.upper() for k in asdict(base_settings)}
             except Exception:
                 logger.warning("Could not read runtime settings keys")
                 return base_settings

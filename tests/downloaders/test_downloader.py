@@ -1,11 +1,11 @@
-"""Production-quality tests for qcrawl.core.downloader.Downloader"""
+"""Production-quality tests for qcrawl.core.downloader.HTTPDownloader"""
 
 from unittest.mock import AsyncMock, Mock
 
 import aiohttp
 import pytest
 
-from qcrawl.core.downloader import Downloader
+from qcrawl.downloaders import HTTPDownloader
 
 
 @pytest.fixture
@@ -21,8 +21,8 @@ def mock_session():
 
 
 def test_downloader_init_with_owned_session(mock_session):
-    """Downloader initializes correctly when it owns the session."""
-    downloader = Downloader(mock_session, own_session=True)
+    """HTTPDownloader initializes correctly when it owns the session."""
+    downloader = HTTPDownloader(mock_session, own_session=True)
 
     assert downloader._session is mock_session
     assert downloader._own_session is True
@@ -31,8 +31,8 @@ def test_downloader_init_with_owned_session(mock_session):
 
 
 def test_downloader_init_with_external_session(mock_session):
-    """Downloader initializes correctly with external session."""
-    downloader = Downloader(mock_session, own_session=False)
+    """HTTPDownloader initializes correctly with external session."""
+    downloader = HTTPDownloader(mock_session, own_session=False)
 
     assert downloader._session is mock_session
     assert downloader._own_session is False
@@ -44,8 +44,8 @@ def test_downloader_init_with_external_session(mock_session):
 
 @pytest.mark.asyncio
 async def test_downloader_create_factory():
-    """Downloader.create() produces a working instance."""
-    downloader = await Downloader.create()
+    """HTTPDownloader.create() produces a working instance."""
+    downloader = await HTTPDownloader.create()
 
     try:
         assert downloader._session is not None
@@ -62,8 +62,8 @@ async def test_downloader_create_factory():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("own_session", [True, False])
 async def test_close_behavior_based_on_ownership(mock_session, own_session):
-    """Downloader only closes session it owns."""
-    downloader = Downloader(mock_session, own_session=own_session)
+    """HTTPDownloader only closes session it owns."""
+    downloader = HTTPDownloader(mock_session, own_session=own_session)
 
     await downloader.close()
 
@@ -77,8 +77,8 @@ async def test_close_behavior_based_on_ownership(mock_session, own_session):
 
 @pytest.mark.asyncio
 async def test_multiple_close_calls_are_safe(mock_session):
-    """Downloader handles multiple close() calls gracefully."""
-    downloader = Downloader(mock_session, own_session=True)
+    """HTTPDownloader handles multiple close() calls gracefully."""
+    downloader = HTTPDownloader(mock_session, own_session=True)
 
     await downloader.close()
     await downloader.close()  # Should not error or double-close
@@ -92,8 +92,8 @@ async def test_multiple_close_calls_are_safe(mock_session):
 
 
 def test_downloader_has_signals(mock_session):
-    """Downloader has access to signal registry."""
-    downloader = Downloader(mock_session)
+    """HTTPDownloader has access to signal registry."""
+    downloader = HTTPDownloader(mock_session)
 
     assert downloader.signals is not None
     # Signal dispatcher is available

@@ -12,8 +12,8 @@ from qcrawl.signals import SignalRegistry
 logger = logging.getLogger(__name__)
 
 
-class Downloader:
-    """Async HTTP downloader.
+class HTTPDownloader:
+    """Async HTTP downloader using aiohttp.
 
     Responsibilities:
       - Own an aiohttp.ClientSession and provide `fetch()` for requests.
@@ -59,7 +59,7 @@ class Downloader:
         connector: aiohttp.BaseConnector | None = None,
         session: aiohttp.ClientSession | None = None,
         settings: dict[str, int | bool | float] | None = None,
-    ) -> "Downloader":
+    ) -> "HTTPDownloader":
         """Create downloader with an active aiohttp session.
 
         Accepts `settings` mapping with optional keys:
@@ -344,7 +344,7 @@ class Downloader:
         except Exception:
             logger.exception("Error closing downloader session")
 
-    async def __aenter__(self) -> "Downloader":
+    async def __aenter__(self) -> "HTTPDownloader":
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
@@ -354,3 +354,6 @@ class Downloader:
     @property
     def is_closed(self) -> bool:
         return self._closed
+
+
+__all__ = ["HTTPDownloader"]

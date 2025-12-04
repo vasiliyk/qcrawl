@@ -51,6 +51,10 @@ redis = [
     "redis>=6.4.0",
 ]
 
+camoufox = [
+    "camoufox>=0.4.11",
+]
+
 prometheus = ["prometheus-client>=0.20.0"]
 opentelemetry = [
     "opentelemetry-api>=1.27.0",
@@ -70,7 +74,8 @@ dev = [
     "pre-commit>=3.5.0",
     "types-aiofiles>=23.2.0",
     "lxml-stubs>=0.5.1", # lxml type hints
-    "redis>=6.4.0",
+    "qcrawl[redis]",
+    "qcrawl[camoufox]",
 ]
 
 docs = ["mkdocs-material>=9.6.23"]

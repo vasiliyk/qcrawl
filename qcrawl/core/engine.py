@@ -10,12 +10,12 @@ from typing import TYPE_CHECKING
 import aiohttp
 
 from qcrawl import signals
-from qcrawl.core.downloader import Downloader
 from qcrawl.core.item import Item
 from qcrawl.core.request import Request
 from qcrawl.core.response import Page
 from qcrawl.core.scheduler import Scheduler
 from qcrawl.core.spider import Spider
+from qcrawl.downloaders.handler_manager import DownloadHandlerManager
 from qcrawl.middleware import DownloaderMiddleware
 from qcrawl.middleware.base import Action, MiddlewareResult
 from qcrawl.middleware.manager import MiddlewareManager
@@ -27,10 +27,10 @@ logger = logging.getLogger(__name__)
 
 
 class CrawlEngine:
-    """Core engine orchestrating scheduler, downloader, spider, and middleware.
+    """Core engine orchestrating scheduler, handler manager, spider, and middleware.
 
     Responsibilities
-        - Wire scheduler, downloader and spider together for the crawl lifecycle.
+        - Wire scheduler, handler manager and spider together for the crawl lifecycle.
         - Execute downloader middleware chains (request/response/exception).
         - Use MiddlewareManager for spider middleware phases (start/input/output/exception).
         - Manage worker tasks and ensure graceful shutdown.
@@ -39,7 +39,7 @@ class CrawlEngine:
 
     __slots__ = (
         "scheduler",
-        "downloader",
+        "handler_manager",
         "spider",
         "signals",
         "middlewares",
@@ -52,18 +52,18 @@ class CrawlEngine:
     def __init__(
         self,
         scheduler: Scheduler,
-        downloader: Downloader,
+        handler_manager: DownloadHandlerManager,
         spider: Spider,
     ) -> None:
         """Initialize engine with required components.
 
         Args:
             scheduler: Request scheduler used to obtain new work.
-            downloader: Downloader responsible for fetching HTTP responses.
+            handler_manager: DownloadHandlerManager responsible for routing requests to appropriate handlers.
             spider: Spider instance to which responses are dispatched.
         """
         self.scheduler = scheduler
-        self.downloader = downloader
+        self.handler_manager = handler_manager
         self.spider = spider
         self.signals = signals.signals_registry.for_sender(self)
 
@@ -257,8 +257,8 @@ class CrawlEngine:
         # Download
         await self.signals.send_async("request_reached_downloader", request=request)
 
-        # Delegate header merging to the Downloader; pass spider so downloader can access runtime settings
-        response = await self.downloader.fetch(request, spider=self.spider)
+        # Delegate to handler manager; it routes to appropriate handler and passes spider
+        response = await self.handler_manager.fetch(request, spider=self.spider)
 
         # Response phase
         result = await self._run_middleware_chain(

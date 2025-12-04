@@ -70,6 +70,41 @@ class Settings:
         }
     )
 
+    # Download handlers (protocol/handler routing)
+    DOWNLOAD_HANDLERS: dict[str, str] = field(
+        default_factory=lambda: {
+            "http": "qcrawl.downloaders.HTTPDownloader",
+            "https": "qcrawl.downloaders.HTTPDownloader",
+        }
+    )
+
+    # Camoufox browser downloader settings
+    CAMOUFOX_CONTEXTS: dict[str, dict[str, object]] = field(
+        default_factory=lambda: {
+            "default": {
+                "viewport": {"width": 1280, "height": 720},
+                "ignore_https_errors": False,
+            }
+        }
+    )
+
+    CAMOUFOX_MAX_CONTEXTS: int = 10
+    CAMOUFOX_MAX_PAGES_PER_CONTEXT: int = 5
+    CAMOUFOX_DEFAULT_NAVIGATION_TIMEOUT: float = 30000.0  # milliseconds
+
+    CAMOUFOX_LAUNCH_OPTIONS: dict[str, object] = field(
+        default_factory=lambda: {
+            "headless": True,
+            "args": [],
+        }
+    )
+
+    CAMOUFOX_ABORT_REQUEST: object | None = None  # Callable[[route.request], bool]
+    CAMOUFOX_PROCESS_REQUEST_HEADERS: str = (
+        "use_scrapy_headers"  # "use_scrapy_headers" | "ignore" | callable
+    )
+    CAMOUFOX_CDP_URL: str | None = None  # Remote browser CDP endpoint
+
     DOWNLOADER_MIDDLEWARES: dict[str, int] = field(
         default_factory=lambda: {
             "qcrawl.middleware.downloader.RobotsTxtMiddleware": 200,
@@ -202,6 +237,52 @@ class Settings:
                     raise TypeError(f"{name} keys must be dotted path strings, got {type(k)!r}")
                 if not isinstance(v, int):
                     raise TypeError(f"{name}[{k}] must be int")
+
+        # Validate DOWNLOAD_HANDLERS
+        if not isinstance(self.DOWNLOAD_HANDLERS, dict):
+            raise TypeError("DOWNLOAD_HANDLERS must be a dict")
+        for handler_name, handler_path in self.DOWNLOAD_HANDLERS.items():
+            if not isinstance(handler_name, str):
+                raise TypeError(
+                    f"DOWNLOAD_HANDLERS keys must be strings, got {type(handler_name)!r}"
+                )
+            if not isinstance(handler_path, str):
+                raise TypeError(
+                    f"DOWNLOAD_HANDLERS values must be dotted paths, got {type(handler_path)!r}"
+                )
+
+        # Validate Camoufox settings
+        if self.CAMOUFOX_MAX_CONTEXTS < 1:
+            raise ValueError(
+                f"CAMOUFOX_MAX_CONTEXTS must be >= 1, got {self.CAMOUFOX_MAX_CONTEXTS}"
+            )
+
+        if self.CAMOUFOX_MAX_PAGES_PER_CONTEXT < 1:
+            raise ValueError(
+                f"CAMOUFOX_MAX_PAGES_PER_CONTEXT must be >= 1, got {self.CAMOUFOX_MAX_PAGES_PER_CONTEXT}"
+            )
+
+        if self.CAMOUFOX_DEFAULT_NAVIGATION_TIMEOUT <= 0:
+            raise ValueError(
+                f"CAMOUFOX_DEFAULT_NAVIGATION_TIMEOUT must be > 0, got {self.CAMOUFOX_DEFAULT_NAVIGATION_TIMEOUT}"
+            )
+
+        if not isinstance(self.CAMOUFOX_CONTEXTS, dict):
+            raise TypeError("CAMOUFOX_CONTEXTS must be a dict")
+
+        if not isinstance(self.CAMOUFOX_LAUNCH_OPTIONS, dict):
+            raise TypeError("CAMOUFOX_LAUNCH_OPTIONS must be a dict")
+
+        if self.CAMOUFOX_PROCESS_REQUEST_HEADERS not in (
+            "use_scrapy_headers",
+            "ignore",
+        ) and not callable(self.CAMOUFOX_PROCESS_REQUEST_HEADERS):
+            raise ValueError(
+                "CAMOUFOX_PROCESS_REQUEST_HEADERS must be 'use_scrapy_headers', 'ignore', or callable"
+            )
+
+        if self.CAMOUFOX_CDP_URL is not None and not isinstance(self.CAMOUFOX_CDP_URL, str):
+            raise TypeError("CAMOUFOX_CDP_URL must be str or None")
 
     @classmethod
     def load(cls, config_file: str | None = None, **overrides) -> Settings:

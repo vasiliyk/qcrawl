@@ -14,7 +14,7 @@ nav:
     - Installation: getting-started/installation.md
     - Examples: getting-started/examples.md
 #    - Tutorial: getting-started/tutorial.md
-  - Concepts:
+  - Core Concepts:
       - Command-Line Interface: concepts/cli.md
       - Spiders: concepts/spiders.md
       - Selectors: concepts/selectors.md
@@ -24,6 +24,9 @@ nav:
       - Middlewares: concepts/middlewares.md
       - Requests and Responses: concepts/requests_responses.md
       - Settings: concepts/settings.md
+  - Built-in Components:
+      - Logging: built-in/logging.md
+      - Stat Collection: built-in/stats.md
   - Advanced Topics:
       - Authentication: advanced-topics/authentication.md
       - Crawling ordering: advanced-topics/crawl_ordering.md
@@ -32,16 +35,16 @@ nav:
       - Link filtering: advanced-topics/link_filtering.md
       - Pagination: advanced-topics/pagination.md
       - Rate limiting: advanced-topics/rate_limiting.md
+      - Browser Automation: advanced-topics/browser_automation.md
+      - Anti-Bot Evasion: advanced-topics/anti_bot_evasion.md
 #    - Deduplication: advanced/deduplication.md
 #    - Performance Optimization: advanced/performance_optimization.md
-  - Built-in Components:
-      - Logging: built-in/logging.md
-      - Stat Collection: built-in/stats.md
   - Extending qCrawl:
     - Architecture overview: extending/architecture_overview.md
     - Middleware: extending/middleware.md
     - Signals: extending/signals.md
     - Scheduler: extending/scheduler.md
+    - Testing: extending/testing.md
 
 # Repository
 repo_url: https://github.com/crawlcore/qcrawl

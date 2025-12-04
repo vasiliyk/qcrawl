@@ -6,7 +6,7 @@ It can be applied to various tasks, such as data mining, monitoring, and automat
 
 <div class="grid cards" markdown>
 
--   :material-clock-fast:{ .lg .middle } __Start in 5 minutes__
+-   :material-clock-fast:{ .lg .middle } __Start in 10 minutes__
 
     ---
 
