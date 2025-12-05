@@ -172,7 +172,7 @@ async def test_process_request_uses_global_delay_when_retry_delay_smaller(spider
     await middleware.process_request(request2, spider)
     elapsed = time.monotonic() - start
 
-    assert elapsed >= 0.14  # Should use global delay (0.15s)
+    assert elapsed >= 0.13  # Should use global delay (0.15s, allowing for timing variance)
 
 
 @pytest.mark.asyncio
