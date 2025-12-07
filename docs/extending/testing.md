@@ -22,11 +22,11 @@ Located in: `tests/`
 ```python
 def test_parse_args_basic(monkeypatch):
     """parse_args correctly parses CLI arguments."""
-    monkeypatch.setattr(sys, "argv", ["qcrawl", "spider.py:Spider", "--export", "out.json"])
+    monkeypatch.setattr(sys, "argv", ["qcrawl", "spider:Spider", "--export", "out.json"])
 
     args = cli.parse_args()
 
-    assert args.spider == "spider.py:Spider"
+    assert args.spider == "spider:Spider"
     assert args.export == "out.json"
 ```
 

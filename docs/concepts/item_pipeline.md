@@ -349,7 +349,7 @@ class MySpider(Spider):
     start_urls = ["https://example.com"]
 
     custom_settings = {
-        "ITEM_PIPELINES": {
+        "PIPELINES": {
             "myproject.pipelines.TextCleaningPipeline": 100,
             "myproject.pipelines.PriceNormalizationPipeline": 200,
             "myproject.pipelines.DateParsingPipeline": 300,

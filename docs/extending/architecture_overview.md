@@ -61,9 +61,9 @@ See: [Scheduler implementation](scheduler.md) for internals
 - Timeout handling
 - Signal emission for observability
 
-**Settings**: `CONCURRENCY`, `CONCURRENCY_PER_DOMAIN`, `DOWNLOAD_TIMEOUT`
+**Settings**: `CONCURRENCY`, `CONCURRENCY_PER_DOMAIN`, `TIMEOUT`
 
-**Location**: `qcrawl/core/downloader.py`
+**Location**: `qcrawl/downloaders/` (base.py, http.py, camoufox.py)
 
 ### Item Pipeline
 **Responsibility**: Process scraped items through validation, cleaning, and export.
@@ -275,11 +275,16 @@ See: [Settings documentation](../concepts/settings.md)
 - `qcrawl/core/crawler.py` - Crawler orchestration
 - `qcrawl/core/engine.py` - Engine worker loop
 - `qcrawl/core/scheduler.py` - Request scheduling
-- `qcrawl/core/downloader.py` - HTTP downloading
 - `qcrawl/core/spider.py` - Base Spider class
 - `qcrawl/core/request.py` - Request model
 - `qcrawl/core/response.py` - Response model
 - `qcrawl/core/item.py` - Item model
+
+**Downloaders**:
+
+- `qcrawl/downloaders/base.py` - Base downloader class
+- `qcrawl/downloaders/http.py` - HTTP downloader
+- `qcrawl/downloaders/camoufox.py` - Browser-based downloader
 
 **Middleware system**:
 
@@ -295,10 +300,7 @@ See: [Settings documentation](../concepts/settings.md)
 
 **Exporters**:
 
-- `qcrawl/exporters/base.py` - Exporter base
-- `qcrawl/exporters/json.py` - JSON exporter
-- `qcrawl/exporters/jsonlines.py` - JSON Lines exporter
-- `qcrawl/exporters/csv.py` - CSV exporter
+- `qcrawl/exporters.py` - All exporters (JSON, NDJSON, CSV, XML)
 
 **Signals and stats**:
 

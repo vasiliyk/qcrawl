@@ -20,10 +20,10 @@ They can be used via the CLI or programmatically.
 ### JSON Lines (default)
 ```bash
 # One JSON object per line (streaming-friendly, memory efficient)
-qcrawl quotes_css_spider.py --export output.jsonl
+qcrawl quotes_css_spider:Quotes --export output.jsonl
 
 # Or explicitly specify format
-qcrawl quotes_css_spider.py --export output.jsonl --export-format ndjson
+qcrawl quotes_css_spider:Quotes --export output.jsonl --export-format ndjson
 ```
 
 **Output (output.jsonl):**
@@ -35,7 +35,7 @@ qcrawl quotes_css_spider.py --export output.jsonl --export-format ndjson
 ### JSON (full array)
 ```bash
 # All items in a single JSON array
-qcrawl quotes_css_spider.py --export output.json --export-format json
+qcrawl quotes_css_spider:Quotes --export output.json --export-format json
 ```
 
 **Output (output.json):**
@@ -59,7 +59,7 @@ qcrawl quotes_css_spider.py --export output.json --export-format json
 ### CSV
 ```bash
 # Comma-separated values (works best with flat data structures)
-qcrawl quotes_css_spider.py --export output.csv --export-format csv
+qcrawl quotes_css_spider:Quotes --export output.csv --export-format csv
 ```
 
 **Output (output.csv):**
@@ -72,7 +72,7 @@ https://quotes.toscrape.com/,"It is our choices...",J.K. Rowling,"['abilities', 
 ### XML
 ```bash
 # XML format
-qcrawl quotes_css_spider.py --export output.xml --export-format xml
+qcrawl quotes_css_spider:Quotes --export output.xml --export-format xml
 ```
 
 **Output (output.xml):**
@@ -95,13 +95,13 @@ qcrawl quotes_css_spider.py --export output.xml --export-format xml
 
 ```bash
 # Buffered (default): Collects items in memory, writes at end
-qcrawl quotes_css_spider.py --export output.json --export-mode buffered
+qcrawl quotes_css_spider:Quotes --export output.json --export-mode buffered
 
 # Streaming: Writes items immediately as they're scraped (memory efficient)
-qcrawl quotes_css_spider.py --export output.jsonl --export-mode stream
+qcrawl quotes_css_spider:Quotes --export output.jsonl --export-mode stream
 
 # Adjust buffer size (items to collect before writing)
-qcrawl quotes_css_spider.py --export output.jsonl --export-buffer-size 1000
+qcrawl quotes_css_spider:Quotes --export output.jsonl --export-buffer-size 1000
 ```
 
 

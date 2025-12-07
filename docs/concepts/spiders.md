@@ -28,7 +28,7 @@ Simple example spider that uses css selectors and yields `Item`:
 ```python
 from datetime import datetime, timezone
 
-from qcrawl.core.spider import Spider, ResponseView
+from qcrawl.core.spider import Spider
 from qcrawl.core.response import Page
 from qcrawl.core.item import Item
 
@@ -64,7 +64,7 @@ class QuotesSpider(Spider):
         if next_link:
             href = next_link[0].get("href")
             if href:
-                yield rv.follow(response, href)
+                yield rv.follow(href)
 ```
 
 ## Scraping lifecycle

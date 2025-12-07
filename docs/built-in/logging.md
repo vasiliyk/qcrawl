@@ -12,7 +12,7 @@ You can customize logging via CLI flags, runtime settings, environment variables
 ```bash
 # --log-level (default INFO) — sets the root logging level.
 # --log-file — add a file handler in addition to console.
-qcrawl --log-level DEBUG --log-file ./logs/crawl.log myspider
+qcrawl --log-level DEBUG --log-file ./logs/crawl.log myspider:MySpider
 ```
 
 ### Via toml config file
@@ -31,7 +31,7 @@ export QCRAWL_LOG_LEVEL=DEBUG
 export QCRAWL_LOG_FILE=./logs/crawl.log
 export QCRAWL_LOG_FORMAT="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 export QCRAWL_LOG_DATEFORMAT="%Y-%m-%d %H:%M:%S"
-qcrawl myspider
+qcrawl myspider:MySpider
 ```
 
 ### Via code
@@ -91,8 +91,6 @@ None  # → 2025-11-25 10:30:45,123
 "%Y/%m/%d %I:%M:%S %p"  # → 2025/11/25 10:30:45 AM
 "%b %d %H:%M:%S"  # → Nov 25 10:30:45
 ```
-
-## Notes
 
 !!! note
 
