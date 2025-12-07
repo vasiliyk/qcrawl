@@ -41,7 +41,7 @@ class QuotesSpider(Spider):
 Run it:
 ```bash
 # Default - prints to console (stdout) in NDJSON format
-qcrawl quotes_spider.py:QuotesSpider
+qcrawl quotes_spider:QuotesSpider
 ```
 The spider visits the URL, extracts quotes, and outputs them to stdout in NDJSON format (one JSON object per line).
 
@@ -236,13 +236,13 @@ Save scraped data to files:
 
 ```bash
 # Export to JSON
-qcrawl --export quotes.json --export-format json quotes_spider.py:QuotesSpider
+qcrawl --export quotes.json --export-format json quotes_spider:QuotesSpider
 
 # Export to CSV
-qcrawl --export quotes.csv --export-format csv quotes_spider.py:QuotesSpider
+qcrawl --export quotes.csv --export-format csv quotes_spider:QuotesSpider
 
 # Export to XML
-qcrawl --export quotes.xml --export-format xml quotes_spider.py:QuotesSpider
+qcrawl --export quotes.xml --export-format xml quotes_spider:QuotesSpider
 ```
 
 **Export formats:**
@@ -320,7 +320,7 @@ class QuotesSpider(Spider):
 
 **Run with export:**
 ```bash
-qcrawl --export quotes.json --export-format json quotes_spider.py:QuotesSpider
+qcrawl --export quotes.json --export-format json quotes_spider:QuotesSpider
 ```
 
 ## What’s next?
