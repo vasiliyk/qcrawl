@@ -157,11 +157,11 @@ tree.cssselect('input[type="checkbox"]:checked')  # Note: :checked works
 
 ### Common Pitfalls & Gotchas
 
-| Issue                                  | Solution                                                                                                                                                                                                                                                |
-|----------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Namespaces (e.g., XHTML, SVG)          | Choose HTML vs XML mode deliberately: use `html.fromstring()` for HTML (lenient parsing), use `etree.fromstring()` (or `etree.XMLParser`) for XML with namespace-aware XPath. Pass `namespaces` mapping to `.xpath()` when needed.                      |
-| Dynamic content (JavaScript-loaded)    | lxml does not execute JavaScript. Render with a browser automation tool (Selenium, Playwright), then pass the rendered HTML to lxml for parsing.                                                                                                        |
-| Anti-scraping (obfuscated class names) | Prefer structure- or attribute-based selectors (tags, ARIA roles, data- attributes, text), use heuristics (position, parent/child relationships), or render+interact via a headless browser. Rotate user-agents / IPs and respect robots.txt and terms. |
+| Issue                                  | Solution                                                                                                                                                                                                                           |
+|----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Namespaces (e.g., XHTML, SVG)          | Choose HTML vs XML mode deliberately: use `html.fromstring()` for HTML (lenient parsing), use `etree.fromstring()` (or `etree.XMLParser`) for XML with namespace-aware XPath. Pass `namespaces` mapping to `.xpath()` when needed. |
+| Dynamic content (JavaScript-loaded)    | lxml does not execute JavaScript. Use qCrawl's [Camoufox browser downloader](../advanced-topics/browser_automation.md) and extract data from the rendered page.                                                                    |
+| Anti-scraping (obfuscated class names) | Prefer structure- or attribute-based selectors (tags, ARIA roles, data- attributes, text), use heuristics (position, parent/child relationships), or render+interact via Camoufox.                                                 |
 
 Notes
 
